@@ -1,8 +1,9 @@
 import express from "express";
-//import { routes as apiRoutes } from "./routes/index.js";
+import { routes as apiRoutes } from "./routes/index.js";
 import { connectDB } from "./config/db.js";
 import cookieParser from "cookie-parser";
 import cors from "cors";
+
 
 const app = express();
 
@@ -21,7 +22,7 @@ app.use(express.json());
 app.use(cookieParser());
 
 
-//app.use("/api", apiRoutes);
+app.use("/api", apiRoutes);
 
 const PORT = 3001;
 
