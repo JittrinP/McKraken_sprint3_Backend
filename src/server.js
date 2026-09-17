@@ -12,7 +12,7 @@ const corsOptions = {
     "http://localhost:5173",
     "http://localhost:5174",
     "http://localhost:5175",
-    "https://jsd-app.vercel.app",
+    "https://jsd-13-group-project2-mc-kraken-spr.vercel.app",
   ], // frontend domain
   credentials: true, // ✅ allow cookies to be sent
 };
