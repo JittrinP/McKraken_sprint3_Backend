@@ -22,6 +22,7 @@ db.users.insertMany([
       {
         // ใส่ _id เองเพราะ insertMany รันตรงผ่าน MongoDB driver ไม่ผ่าน mongoose เลยไม่ gen ให้อัตโนมัติ
         _id: ObjectId(),
+        recipient_name: 'Somsri Khamkaew',
         address: '123/45 Sukhumvit Road',
         phone: '081-234-5678',
         sub_district: 'Khlong Tan Nuea',
@@ -48,6 +49,7 @@ db.users.insertMany([
     shipping_addresses: [
       {
         _id: ObjectId(),
+        recipient_name: 'Thanakorn Wongphaisan',
         address: '88 Ratchadamnoen Road',
         phone: '089-999-8888',
         sub_district: 'Bowon Niwet',
@@ -74,6 +76,7 @@ db.users.insertMany([
     shipping_addresses: [
       {
         _id: ObjectId(),
+        recipient_name: 'Pichaya Naksakul',
         address: '45 Moo 3 Nimmanhaemin Road',
         phone: '062-345-1290',
         sub_district: 'Suthep',
@@ -100,6 +103,7 @@ db.users.insertMany([
     shipping_addresses: [
       {
         _id: ObjectId(),
+        recipient_name: 'Kanyarat Prasertsuk',
         address: '7/19 Ngamwongwan Road',
         phone: '095-678-1234',
         sub_district: 'Bang Kraso',

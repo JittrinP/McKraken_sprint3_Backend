@@ -3,6 +3,9 @@ import mongoose from "mongoose";
 // Sub-schema: ที่อยู่จัดส่ง 1 รายการ ฝังอยู่ใน user (embedded ไม่ใช่ collection แยก)
 const shippingAddressSchema = new mongoose.Schema(
   {
+    // ชื่อผู้รับของที่อยู่นี้ (อาจไม่ใช่เจ้าของบัญชีก็ได้ เช่น ส่งให้คนอื่น) ตรงกับช่อง "Full Name" ในฟอร์ม frontend
+    recipient_name: { type: String, required: true },
+
     // บรรทัดที่อยู่หลัก เช่น "123/45 Sukhumvit Road"
     address: { type: String, required: true },
 
