@@ -27,6 +27,7 @@ const cartItemSchema = new mongoose.Schema({
         inventory_item_id: {
           type: mongoose.Schema.Types.ObjectId,
           ref: "InventoryItem",
+          required : true
         },
         quantity: { type: Number, required: true, min: 1 },
       },
