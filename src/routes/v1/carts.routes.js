@@ -1,5 +1,8 @@
 import { Router } from "express";
 import Cart from "../../models/cart.model.js";
+import "../../models/product.model.js";
+import "../../models/inventory-items.model.js";
+import { calcCart } from "../../utils/pricing.js";
 
 export const router = Router();
 
@@ -15,10 +18,13 @@ router.get("/", async (req, res, next) => {
     }
 
     //populate คือเอาจากตัวที่ ref มา string แรก = path ที่มี ref, string ที่ 2 = field ที่จะเอาจาก Product ที่ดึงมา ถ้าไม่ใส่ก็ดึงมาหมด
-    const cart = await Cart.findOne({ user_id }).populate(
-      "items.product_id",
-      "name description images base_price",
-    );
+    const cart = await Cart.findOne({ user_id })
+      .populate("items.product_id", "name description images base_price")
+      .populate(
+        "items.custom_specs.components.inventory_item_id",
+        "name cost_price",
+      );
+
     if (!cart) {
       return res.status(200).json({
         success: true,
@@ -26,9 +32,15 @@ router.get("/", async (req, res, next) => {
         user_id,
         items: [],
         gift_note: "",
+        subtotal: 0,
+        service_fee: 0,
+        delivery_fee: 0,
+        total: 0,
       });
     }
-    return res.status(200).json(cart);
+
+    //calcCart คืนค่า items (มี unit_price , line_total) ทับ items เดิมของ cart
+    return res.status(200).json({ ...cart.toObject(), ...calcCart(cart) });
   } catch (err) {
     next(err);
   }
@@ -59,14 +71,30 @@ router.post("/", async (req, res, next) => {
       });
     }
 
-    //สร้าง newItem จาก body ใหม่ คือถ้า new Item ที่กดเป็น standard ให้สร้างแบบ product ถ้าไม่ใช่ให้รับแบบ custom
-    const newItem =
-      item_type === "standard_product"
-        ? { item_type, product_id, quantity }
-        : { item_type, quantity, custom_specs };
-
     //ให้หาก่อนว่าตอนนี้มี cart ยังถ้าไม่มีให้ create
     const cart = await Cart.findOne({ user_id });
+
+    //สร้าง newItem จาก body ใหม่ คือถ้า new Item ที่กดเป็น standard ให้สร้างแบบ product ถ้าไม่ใช่ให้รับแบบ custom
+    let newItem;
+    if (item_type === "standard_product") {
+      newItem = { item_type, product_id, quantity };
+    } else {
+      // ถ้าไม่ส่ง design_name มา ตั้งชื่อ "Custom design N" (N = จำนวนช่อ custom ในตะกร้า + 1)
+      const customCount = cart
+        ? cart.items.filter((i) => i.item_type === "custom_product").length
+        : 0;
+      newItem = {
+        item_type,
+        quantity,
+        custom_specs: {
+          ...custom_specs,
+          design_name:
+            custom_specs?.design_name?.trim() ||
+            `Custom design ${customCount + 1}`,
+        },
+      };
+    }
+
     //ถ้ากดครั้งแรกยังไม่มี cart ให้ create ขึ้นมาก่อน status 201 คือสร่างของใหม่เสร็จ
     if (!cart) {
       const created = await Cart.create({
@@ -90,6 +118,33 @@ router.post("/", async (req, res, next) => {
     }
     cart.items.push(newItem);
     // cart.save() คือสั่งให้แก้ลง MongoDB และตรวจ schema
+    await cart.save();
+    return res.status(200).json({ success: true, cart });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// patchGiftNote Controller (gift_note เป็นของทั้งตะกร้า ไม่ใช่ต่อ item)
+router.patch("/", async (req, res, next) => {
+  try {
+    const { user_id, gift_note } = req.body;
+    if (!user_id || typeof gift_note !== "string") {
+      return res.status(400).json({
+        success: false,
+        message: "user_id and gift_note (string) are required",
+      });
+    }
+
+    const cart = await Cart.findOne({ user_id });
+    if (!cart) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Cart not found" });
+    }
+
+    // ส่ง "" มาเพื่อลบข้อความได้ ส่วนเกิน 200 ตัวอักษรจะถูก schema ตรวจตอน save
+    cart.gift_note = gift_note;
     await cart.save();
     return res.status(200).json({ success: true, cart });
   } catch (err) {
@@ -128,6 +183,38 @@ router.patch("/:itemId", async (req, res, next) => {
     }
     await cart.save();
     return res.status(200).json({ success: true, cart });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// clearCart Controller (เก็บ document ตะกร้าไว้ ล้างแค่ items กับ gift_note)
+//ใช้เมื่อไหร่ 1. ปุ่ม "Clear cart" / "ล้างตะกร้า" ในหน้า Cart ถ้า frontend ออกแบบให้มี 2. หลัง Confirm Order แต่กรณีนี้ ไม่ควรให้ frontend เรียก endpoint นี้ ให้ backend ล้างเองในขั้นตอนสร้าง order (ตามที่คุยกันก่อนหน้า) เพราะถ้าให้ frontend เรียกแยก แล้วเรียกไม่สำเร็จ ตะกร้าจะค้างหลังสั่งซื้อไปแล้ว
+
+router.delete("/", async (req, res, next) => {
+  try {
+    const { user_id } = req.body;
+    if (!user_id) {
+      return res
+        .status(400)
+        .json({ success: false, message: "user_id is required" });
+    }
+
+    // $set คือ update operator ของ MongoDB แปลว่า "ตั้งค่า field เหล่านี้ให้เป็นค่าที่ระบุ" field อื่นที่ไม่ได้เขียนถึง (เช่น user_id, _id, createdAt) จะไม่ถูกแตะ
+    const cart = await Cart.findOneAndUpdate(
+      { user_id },
+      { $set: { items: [], gift_note: "" } },
+      { new: true },
+    );
+    if (!cart) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Cart not found" });
+    }
+
+    return res
+      .status(200)
+      .json({ success: true, message: "Cart was cleared", cart });
   } catch (err) {
     next(err);
   }

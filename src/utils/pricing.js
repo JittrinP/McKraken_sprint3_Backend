@@ -1,3 +1,23 @@
+/**
+ * คำนวณราคาของตะกร้า ใช้ทั้งใน GET /cart (แสดงผล) และตอนสร้าง Order (snapshot)
+ *
+ * รับ: cart (mongoose document) ที่ populate แล้วสองที่ ไม่งั้นราคาจะเป็น 0
+ *   .populate("items.product_id", "name description images base_price")
+ *   .populate("items.custom_specs.components.inventory_item_id", "name cost_price")
+ *
+ * คืน: { items, subtotal, service_fee, delivery_fee, total }
+ *   - items: item เดิมทุก field + unit_price (ราคาต่อชิ้น) + line_total (unit_price × quantity)
+ *   - subtotal: ผลรวม line_total
+ *   - service_fee: SERVICE_FEE × จำนวนช่อ custom (นับตาม quantity)
+ *   - delivery_fee: DELIVERY_FEE (0 ถ้าตะกร้าว่าง)
+ *   - total: subtotal + service_fee + delivery_fee
+ *
+ * ราคา: standard_product = base_price, custom_product = ผลรวม (cost_price × quantity ของแต่ละ component)
+ *
+ * ตอนสร้าง Order ให้เอาผลที่ได้ไปเก็บเป็น snapshot (ราคาและชื่อสินค้า ณ ตอนสั่ง)
+ * ห้ามเก็บแค่ product_id แล้วไปดึงราคาใหม่ภายหลัง
+ */
+
 export const SERVICE_FEE = 100; // ต่อช่อ 100 ต่อ 1 custom ช่อ
 export const DELIVERY_FEE = 10; // fix delivery
 
