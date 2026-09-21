@@ -12,17 +12,17 @@ const shippingAddressSchema = new mongoose.Schema(
     // เบอร์ติดต่อของที่อยู่นี้ (อาจคนละเบอร์กับ phone_number หลักของ user ได้)
     phone: { type: String, required: true },
 
-    // ตำบล/แขวง
-    sub_district: { type: String, required: true },
+    // ตำบล/แขวง — ไม่บังคับ เพราะฟอร์ม frontend (CustomerAddress.jsx) ไม่ได้บังคับกรอกช่องนี้
+    sub_district: { type: String },
 
-    // อำเภอ/เขต
-    district: { type: String, required: true },
+    // อำเภอ/เขต — ไม่บังคับ ด้วยเหตุผลเดียวกัน
+    district: { type: String },
 
-    // จังหวัด
-    province: { type: String, required: true },
+    // จังหวัด — ไม่บังคับ ด้วยเหตุผลเดียวกัน
+    province: { type: String },
 
-    // รหัสไปรษณีย์
-    postal_code: { type: String, required: true },
+    // รหัสไปรษณีย์ — ไม่บังคับ ด้วยเหตุผลเดียวกัน
+    postal_code: { type: String },
 
     // ที่อยู่เริ่มต้นที่จะเลือกให้ตอน checkout หรือไม่ ถ้าไม่ระบุ default เป็น false
     is_default: { type: Boolean, default: false },

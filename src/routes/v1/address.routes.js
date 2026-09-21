@@ -39,19 +39,11 @@ router.post("/", async (req, res, next) => {
       is_default,
     } = req.body;
 
-    // 2. เช็คว่าข้อมูลที่จำเป็นครบไหม ถ้าไม่ครบตอบ 400
-    if (
-      !recipient_name ||
-      !address ||
-      !phone ||
-      !sub_district ||
-      !district ||
-      !province ||
-      !postal_code
-    ) {
+    // 2. เช็คว่าข้อมูลที่จำเป็นครบไหม (แค่ recipient_name, address, phone เหมือนฟอร์ม frontend ที่บังคับแค่ 3 ช่องนี้) ถ้าไม่ครบตอบ 400
+    if (!recipient_name || !address || !phone) {
       return res.status(400).json({
         success: false,
-        message: "All data is required.",
+        message: "recipient_name, address, and phone are required.",
       });
     }
 
