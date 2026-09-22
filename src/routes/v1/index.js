@@ -15,4 +15,5 @@ routes.use("/cart", cartRoutes);
 routes.use("/user/:userId/address", addressRoutes);
 // ตั้ง URL ของ authRoutes
 routes.use("/auth", authRoutes);
-routes.use("/user/:userId/custom-design", customDesignRoutes);
+// userId มาจาก token (authen) ข้างในแล้ว ไม่ต้องฝังไว้ใน path
+routes.use("/custom-design", customDesignRoutes);
