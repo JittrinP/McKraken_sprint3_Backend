@@ -21,6 +21,16 @@
 export const SERVICE_FEE = 100; // ต่อช่อ 100 ต่อ 1 custom ช่อ
 export const DELIVERY_FEE = 10; // fix delivery
 
+// ราคาต่อช่อ custom = ผลรวม (cost_price × quantity) ของแต่ละ component
+// components ต้อง populate inventory_item_id (ให้มี cost_price) แล้ว ใช้ทั้งใน cart และ saved custom design
+// .reduce คือ array.reduce((ตัวสะสม, ตัวปัจจุบัน) => ตัวสะสมใหม่, ค่าเริ่มต้น)
+export function calcComponents(components = []) {
+  return components.reduce(
+    (sum, c) => sum + (c.inventory_item_id?.cost_price ?? 0) * c.quantity,
+    0,
+  );
+}
+
 // รับ cart ที่มี items.product_id ที่มี base_price กับ custom_specs.components.inventory_item_id ที่มี cost_price
 export function calcCart(cart) {
   let customCount = 0;
@@ -35,12 +45,7 @@ export function calcCart(cart) {
     if (obj.item_type === "standard_product") {
       unitPrice = obj.product_id?.base_price ?? 0;
     } else {
-      // ราคาต่อช่อ = ผลรวม cost_price ของแต่ละ component × จำนวน
-      // .reduce คือ array.reduce((ตัวสะสม, ตัวปัจจุบัน) => ตัวสะสมใหม่, ค่าเริ่มต้น)
-      unitPrice = (obj.custom_specs?.components ?? []).reduce(
-        (sum, c) => sum + (c.inventory_item_id?.cost_price ?? 0) * c.quantity,
-        0,
-      );
+      unitPrice = calcComponents(obj.custom_specs?.components);
       customCount += obj.quantity;
     }
 

@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { savedCustomDesignSchema } from "./custom-design.model.js";
 
 // Sub-schema: ที่อยู่จัดส่ง 1 รายการ ฝังอยู่ใน user (embedded ไม่ใช่ collection แยก)
 const shippingAddressSchema = new mongoose.Schema(
@@ -90,6 +91,9 @@ const userSchema = new mongoose.Schema(
 
     // ที่อยู่จัดส่งของ user คนนี้ (ฝังเป็น array ตรงตาม ER diagram) เริ่มต้นเป็น array ว่าง
     shipping_addresses: { type: [shippingAddressSchema], default: [] },
+
+    // แบบช่อที่เซฟไว้ (ฝังเป็น array ตาม ER) schema อยู่ที่ custom-design.model.js
+    saved_custom_designs: { type: [savedCustomDesignSchema], default: [] },
   },
   {
     // บอก mongoose ว่าให้ใช้ collection ชื่อ 'users'
