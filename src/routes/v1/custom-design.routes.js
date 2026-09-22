@@ -1,20 +1,24 @@
 import { Router } from "express";
+import { authen } from "../../middleware/authen.js";
 import User from "../../models/user.model.js";
 import "../../models/inventory-items.model.js"; // ต้อง import ไว้ให้ populate รู้จัก model InventoryItem
 import { calcComponents } from "../../utils/pricing.js";
 
-// mergeParams: true เพราะ route ถูก mount ที่ "/user/:userId/custom-design" (เหมือน address.routes.js)
-export const router = Router({ mergeParams: true });
+// mount ที่ "/custom-design" (userId ไม่อยู่ใน path แล้ว เอาจาก token ผ่าน authen แทน)
+export const router = Router();
 
 // field ของวัตถุดิบที่จะส่งให้ frontend ตอน populate (ไม่ต้องเอาทุก field)
 const INVENTORY_FIELDS = "name category cost_price attributes";
 
-// GET /api/v1/user/:userId/custom-design
-// ดึงช่อที่เซฟไว้ทั้งหมดของ user คนนี้
+// ต้อง login ก่อนเสมอ (authen แปะ req.user.userId มาให้ ใช้แทน userId ที่เคยอยู่ใน URL)
+router.use(authen);
+
+// GET /api/v1/custom-design
+// ดึงช่อที่เซฟไว้ทั้งหมดของ user ที่ login อยู่
 router.get("/", async (req, res, next) => {
   try {
-    // 1. หา user จาก userId
-    const user = await User.findById(req.params.userId);
+    // 1. หา user จาก token
+    const user = await User.findById(req.user.userId);
     if (!user) {
       return res
         .status(404)
@@ -39,11 +43,11 @@ router.get("/", async (req, res, next) => {
   }
 });
 
-// GET /api/v1/user/:userId/custom-design/:designId
+// GET /api/v1/custom-design/:designId
 // ดึงช่อเดียว ใช้ตอนกดแก้ไข
 router.get("/:designId", async (req, res, next) => {
   try {
-    const user = await User.findById(req.params.userId);
+    const user = await User.findById(req.user.userId);
     if (!user) {
       return res
         .status(404)
@@ -70,7 +74,7 @@ router.get("/:designId", async (req, res, next) => {
   }
 });
 
-// POST /api/v1/user/:userId/custom-design
+// POST /api/v1/custom-design
 // เซฟช่อใหม่ body: { design_name, design_description (ไม่บังคับ), components: [{ inventory_item_id, quantity }] }
 router.post("/", async (req, res, next) => {
   try {
@@ -86,7 +90,7 @@ router.post("/", async (req, res, next) => {
     }
 
     // 3. หา user
-    const user = await User.findById(req.params.userId);
+    const user = await User.findById(req.user.userId);
     if (!user) {
       return res
         .status(404)
@@ -110,13 +114,13 @@ router.post("/", async (req, res, next) => {
   }
 });
 
-// PATCH /api/v1/user/:userId/custom-design/:designId
+// PATCH /api/v1/custom-design/:designId
 // แก้ช่อ ส่งมาเฉพาะ field ที่อยากแก้ก็ได้
 router.patch("/:designId", async (req, res, next) => {
   try {
     const { design_name, design_description, components } = req.body;
 
-    const user = await User.findById(req.params.userId);
+    const user = await User.findById(req.user.userId);
     if (!user) {
       return res
         .status(404)
@@ -143,10 +147,10 @@ router.patch("/:designId", async (req, res, next) => {
   }
 });
 
-// DELETE /api/v1/user/:userId/custom-design/:designId
+// DELETE /api/v1/custom-design/:designId
 router.delete("/:designId", async (req, res, next) => {
   try {
-    const user = await User.findById(req.params.userId);
+    const user = await User.findById(req.user.userId);
     if (!user) {
       return res
         .status(404)
