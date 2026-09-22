@@ -166,3 +166,22 @@ export const getAdminMe = async (req, res) => {
     res.status(500).json({ message: "Internal server error." });
   }
 };
+
+// Logout
+export const logout = async (req, res) => {
+  try {
+    // ลบ refreshToken ใน Database ออก เพื่อไม่ให้ใช้ต่ออายุได้อีก
+    if (req.user?.userId) {
+      await User.findByIdAndUpdate(req.user.userId, { refreshToken: null }); // อัพเดตค่า refreshToken ให้เป็น null
+    }
+
+    // สั่งให้เบราว์เซอร์ลบ Cookie ทั้งสองใบออก
+    res.clearCookie("accessToken");
+    res.clearCookie("refreshToken");
+
+    res.status(200).json({ message: "Logged out successfully" });
+  } catch (error) {
+    console.error("Logout Error:", error);
+    res.status(500).json({ message: "Internal server error." });
+  }
+};
