@@ -89,6 +89,19 @@ const userSchema = new mongoose.Schema(
       gender: { type: String },
     },
 
+    refreshToken: {
+      type: String,
+      default: null,
+    },
+    resetPasswordToken: {
+      type: String,
+      default: null,
+    },
+    resetPasswordExpire: {
+      type: Date,
+      default: null,
+    },
+
     // ที่อยู่จัดส่งของ user คนนี้ (ฝังเป็น array ตรงตาม ER diagram) เริ่มต้นเป็น array ว่าง
     shipping_addresses: { type: [shippingAddressSchema], default: [] },
 
