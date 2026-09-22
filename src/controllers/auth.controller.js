@@ -185,3 +185,161 @@ export const logout = async (req, res) => {
     res.status(500).json({ message: "Internal server error." });
   }
 };
+
+// Refresh Token
+export const refreshToken = async (req, res) => {
+  try {
+    // ดึง refreshToken จาก Cookie
+    const token = req.cookies.refreshToken;
+    if (!token) {
+      return res
+        .status(401)
+        .json({ message: "Refresh Token missing. Please login again." });
+    }
+
+    // ตรวจสอบความถูกต้องของ Refresh Token
+    const decoded = jwt.verify(token, process.env.JWT_REFRESH_SECRET);
+
+    // ค้นหา User และเช็คว่า refreshToken ใน DB ตรงกับที่ส่งมาหรือไม่
+    const user = await User.findById(decoded.userId);
+    if (!user || user.refreshToken !== token) {
+      return res
+        .status(403)
+        .json({ message: "Invalid or revoked refresh token." });
+    }
+
+    // ออก Access Token ใบใหม่ 15 นาทีเหมือนเดิม
+    const newAccessToken = jwt.sign(
+      { userId: user._id, role: user.role },
+      process.env.JWT_SECRET,
+      { expiresIn: "15m" },
+    );
+
+    // ส่ง Access Token ใบใหม่กลับไปใน Cookie
+    res.cookie("accessToken", newAccessToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      maxAge: 15 * 60 * 1000,
+    });
+
+    res.status(200).json({ message: "Token refreshed successfully" });
+  } catch (error) {
+    return res
+      .status(403)
+      .json({ message: "Invalid or expired refresh token." });
+  }
+};
+
+// Forget Password
+export const forgetPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res
+        .status(400)
+        .json({ message: "Please provide an email address." });
+    }
+
+    const user = await User.findOne({ email: email.toLowerCase() });
+
+    if (user) {
+      // เซฟ Mock Code "1234" และกำหนดเวลาหมดอายุ 15 นาที
+      user.resetPasswordToken = "1234";
+      user.resetPasswordExpire = Date.now() + 15 * 60 * 1000;
+      await user.save();
+    }
+
+    // แม้จะไม่พบผู้ใช้ ก็ตอบกลับ 200 (เพื่อป้องกันการโดนสุ่มเช็คอีเมลว่ามีในระบบหรือไม่)
+    res
+      .status(200)
+      .json({ message: "Verification code sent to email (Mock code: 1234)" });
+  } catch (error) {
+    console.error("Forget Password Error:", error);
+    res.status(500).json({ message: "Internal server error." });
+  }
+};
+
+// Reset Password
+export const resetPassword = async (req, res) => {
+  try {
+    const { email, code, newPassword } = req.body;
+
+    if (!email || !code || !newPassword) {
+      return res
+        .status(400)
+        .json({ message: "Please provide all required fields." });
+    }
+
+    // ค้นหา User จาก Email, Code "1234" และยังไม่หมดอายุ
+    const user = await User.findOne({
+      email: email.toLowerCase(),
+      resetPasswordToken: code,
+      resetPasswordExpire: { $gt: Date.now() }, // $gt คือมากกว่าเวลาปัจจุบัน
+    });
+
+    if (!user) {
+      return res
+        .status(400)
+        .json({ message: "Invalid verification code or code expired." });
+    }
+
+    // Hash รหัสผ่านใหม่
+    const salt = await bcrypt.genSalt(10);
+    user.password_hash = await bcrypt.hash(newPassword, salt);
+
+    // เคลียร์ค่ารหัสผ่านชั่วคราวทิ้ง
+    user.resetPasswordToken = null;
+    user.resetPasswordExpire = null;
+    await user.save();
+
+    res.status(200).json({ message: "Password updated successfully." });
+  } catch (error) {
+    console.error("Reset Password Error:", error);
+    res.status(500).json({ message: "Internal server error." });
+  }
+};
+
+// เพิ่มส่วนของ edit password ในหน้า Account (ผมลืม)
+export const editPassword = async (req, res) => {
+  try {
+    // รับค่ารหัสผ่านเดิม และ รหัสผ่านใหม่ จาก Frontend
+    const { oldPassword, newPassword } = req.body;
+
+    if (!oldPassword || !newPassword) {
+      return res
+        .status(400)
+        .json({ message: "Please provide both old and new passwords." });
+    }
+
+    // ดึง userId จาก Token ที่ผ่านการตรวจสอบแล้ว
+    const userId = req.user.userId;
+
+    // ค้นหา User ใน Database
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found." });
+    }
+
+    // นำ oldPassword ที่กรอกมา เทียบกับรหัสผ่านปัจจุบันใน Database
+    const isMatch = await bcrypt.compare(oldPassword, user.password_hash);
+    if (!isMatch) {
+      return res
+        .status(401)
+        .json({ message: "The old password is incorrect." });
+    }
+
+    // ถ้ารหัสเดิมถูกต้อง ให้นำรหัสผ่านใหม่ไป Hash
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(newPassword, salt);
+
+    // อัปเดตรหัสผ่านใหม่ลง Database
+    user.password_hash = hashedPassword;
+    await user.save();
+
+    res.status(200).json({ message: "Password updated successfully." });
+  } catch (error) {
+    console.error("Edit Password Error:", error);
+    res.status(500).json({ message: "Internal server error." });
+  }
+};
