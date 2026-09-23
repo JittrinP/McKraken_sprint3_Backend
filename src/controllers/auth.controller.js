@@ -100,8 +100,8 @@ export const login = async (req, res) => {
     // ส่ง Token ใส่กระเป๋า Cookie แบบ HTTP-Only
     res.cookie("accessToken", accessToken, {
       httpOnly: true, // ป้องกัน JavaScript ฝั่ง Frontend อ่านค่า
-      secure: process.env.NODE_ENV === "production", // ใช้ HTTPS เท่านั้น (ถ้ารันบน production)
-      sameSite: "strict", // ป้องกันการส่ง Cookie ข้ามเว็บไซต์ (กัน CSRF)
+      secure: true,
+      sameSite: "none",
       maxAge: 15 * 60 * 1000, // 15 นาที (หน่วยเป็นมิลลิวินาที)
     });
 
