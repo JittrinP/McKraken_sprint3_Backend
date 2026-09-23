@@ -7,6 +7,8 @@ import { router as authRoutes } from "./auth.routes.js";
 
 import { router as customDesignRoutes } from "./custom-design.routes.js";
 import { router as paymentRoutes } from "./payment.routes.js";
+// ใช้ product resource เดียวกันสำหรับ storefront และหน้า Admin ProductEdit
+import { router as productRoutes } from "./product.routes.js";
 
 export const routes = Router();
 
@@ -19,3 +21,5 @@ routes.use("/user/:userId/address", addressRoutes);
 routes.use("/auth", authRoutes);
 // userId มาจาก token (authen) ข้างในแล้ว ไม่ต้องฝังไว้ใน path
 routes.use("/custom-design", customDesignRoutes);
+// server mount /api และ v1 อยู่ชั้นนอก จึงได้ endpoint จริงเป็น /api/v1/products
+routes.use("/products", productRoutes);
