@@ -13,6 +13,41 @@ const INVENTORY_FIELDS = "name category cost_price attributes";
 // ต้อง login ก่อนเสมอ (authen แปะ req.user.userId มาให้ ใช้แทน userId ที่เคยอยู่ใน URL)
 router.use(authen);
 
+const MAX_PRESET = 5;
+
+// เช็ค preset ก่อนเซฟ ใช้ร่วมกันทั้ง POST และ PATCH
+// - preset ต้องเป็นเลขจำนวนเต็ม 1-5
+// - ถ้ามีช่ออื่นใช้เลขนี้อยู่แล้ว: ไม่ได้ส่ง overwrite มา → ตอบ 409 ให้ frontend ถามยืนยันก่อน
+//                                 ส่ง overwrite: true มา → ลบช่อเดิมออก (เซฟทับ)
+// คืนค่า response ที่ส่งไปแล้วถ้าไม่ผ่าน / คืน null ถ้าผ่าน ให้ทำต่อได้
+function checkPreset(user, preset, overwrite, res, currentDesignId = null) {
+  if (!Number.isInteger(preset) || preset < 1 || preset > MAX_PRESET) {
+    return res.status(400).json({
+      success: false,
+      message: `preset must be a number from 1 to ${MAX_PRESET}.`,
+    });
+  }
+
+  // หาช่ออื่นที่ใช้ preset เลขนี้ (ตอน PATCH ไม่นับตัวที่กำลังแก้อยู่)
+  const taken = user.saved_custom_designs.find(
+    (d) => d.preset === preset && String(d._id) !== String(currentDesignId),
+  );
+  if (!taken) return null;
+
+  if (!overwrite) {
+    return res.status(409).json({
+      success: false,
+      code: "PRESET_TAKEN",
+      message: `Preset ${preset} already has "${taken.design_name}".`,
+      existing_design_name: taken.design_name,
+    });
+  }
+
+  // ยืนยันเซฟทับแล้ว ลบช่อเดิมออกจาก array (ลง DB ตอน user.save() ใน route)
+  taken.deleteOne();
+  return null;
+}
+
 // GET /api/v1/custom-design
 // ดึงช่อที่เซฟไว้ทั้งหมดของ user ที่ login อยู่
 router.get("/", async (req, res, next) => {
@@ -32,10 +67,13 @@ router.get("/", async (req, res, next) => {
     );
 
     // 3. เพิ่ม unit_price ให้ทุกช่อ (คิดจาก cost_price ตอนนี้ ไม่เก็บลง DB ตาม ER)
-    const designs = user.saved_custom_designs.map((design) => {
-      const obj = design.toObject();
-      return { ...obj, unit_price: calcComponents(obj.components) };
-    });
+    // 4. เรียงตามเลข preset 1-5 (ช่อเก่าที่ยังไม่มี preset ไปอยู่ท้ายสุด)
+    const designs = user.saved_custom_designs
+      .map((design) => {
+        const obj = design.toObject();
+        return { ...obj, unit_price: calcComponents(obj.components) };
+      })
+      .sort((a, b) => (a.preset ?? 99) - (b.preset ?? 99));
 
     return res.json(designs);
   } catch (err) {
@@ -75,11 +113,12 @@ router.get("/:designId", async (req, res, next) => {
 });
 
 // POST /api/v1/custom-design
-// เซฟช่อใหม่ body: { design_name, design_description (ไม่บังคับ), components: [{ inventory_item_id, quantity }] }
+// เซฟช่อใหม่ body: { design_name, design_description (ไม่บังคับ), preset (1-5), overwrite (ไม่บังคับ), components: [{ inventory_item_id, quantity }] }
 router.post("/", async (req, res, next) => {
   try {
     // 1. รับข้อมูลจาก body
-    const { design_name, design_description, components } = req.body;
+    const { design_name, design_description, preset, overwrite, components } =
+      req.body;
 
     // 2. เช็คว่าข้อมูลที่จำเป็นครบไหม (quantity กับ inventory_item_id ให้ schema เช็คให้ตอน save)
     if (!design_name || !Array.isArray(components) || components.length === 0) {
@@ -97,15 +136,20 @@ router.post("/", async (req, res, next) => {
         .json({ success: false, message: "User not found" });
     }
 
-    // 4. เพิ่มช่อใหม่เข้า array แล้ว save
+    // 4. เช็ค preset (เลข 1-5, ซ้ำไหม, ยืนยันเซฟทับหรือยัง)
+    const presetError = checkPreset(user, preset, overwrite, res);
+    if (presetError) return presetError;
+
+    // 5. เพิ่มช่อใหม่เข้า array แล้ว save
     user.saved_custom_designs.push({
       design_name,
       design_description,
+      preset,
       components,
     });
     await user.save();
 
-    // 5. ช่อที่เพิ่งเพิ่มคือตัวสุดท้ายใน array
+    // 6. ช่อที่เพิ่งเพิ่มคือตัวสุดท้ายใน array
     const newDesign =
       user.saved_custom_designs[user.saved_custom_designs.length - 1];
     return res.status(201).json({ success: true, design: newDesign });
@@ -118,7 +162,8 @@ router.post("/", async (req, res, next) => {
 // แก้ช่อ ส่งมาเฉพาะ field ที่อยากแก้ก็ได้
 router.patch("/:designId", async (req, res, next) => {
   try {
-    const { design_name, design_description, components } = req.body;
+    const { design_name, design_description, preset, overwrite, components } =
+      req.body;
 
     const user = await User.findById(req.user.userId);
     if (!user) {
@@ -132,6 +177,13 @@ router.patch("/:designId", async (req, res, next) => {
       return res
         .status(404)
         .json({ success: false, message: "Design not found" });
+    }
+
+    // ถ้าส่ง preset มา ต้องเช็คก่อน (ส่ง design._id ไปด้วย จะได้ไม่นับตัวเองว่าซ้ำ)
+    if (preset !== undefined) {
+      const presetError = checkPreset(user, preset, overwrite, res, design._id);
+      if (presetError) return presetError;
+      design.preset = preset;
     }
 
     // แก้เฉพาะ field ที่ส่งมา (undefined = ไม่ได้ส่ง ไม่แตะ)
