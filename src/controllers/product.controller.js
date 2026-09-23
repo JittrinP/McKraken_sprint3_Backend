@@ -4,100 +4,165 @@ import Product from "../models/product.model.js";
 const PRODUCT_TYPES = ["bouquet_set", "single_item"];
 
 function escapeRegex(value) {
-	// escape อักขระพิเศษก่อนสร้าง regex เพื่อให้ search เป็นข้อความธรรมดาและปลอดภัย
-	return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 export async function getProducts(req, res, next) {
-	try {
-		// query เหล่านี้เป็น contract ที่ frontend ใช้สำหรับ search และ filter สินค้า
-		const {
-			search,
-			product_type,
-			is_popular,
-			is_active = "true",
-			tag,
-		} = req.query;
+  try {
+    const {
+      search,
+      product_type,
+      is_popular,
+      is_active = "true",
+      tag,
+    } = req.query;
 
-		const filter = {};
+    const filter = {};
 
-		// storefront เห็นเฉพาะสินค้าที่ active โดย default; Admin ขอทั้งหมดได้ด้วย is_active=all
-		if (is_active !== "all") {
-			if (is_active !== "true" && is_active !== "false") {
-				return res.status(400).json({
-					success: false,
-					message: "is_active must be true, false, or all",
-				});
-			}
-			filter.is_active = is_active === "true";
-		}
+    if (is_active !== "all") {
+      if (is_active !== "true" && is_active !== "false") {
+        return res.status(400).json({
+          success: false,
+          message: "is_active must be true, false, or all",
+        });
+      }
+      filter.is_active = is_active === "true";
+    }
 
-		if (product_type) {
-			// จำกัดค่าตาม enum ของ Product model เพื่อให้ query ที่ผิดตอบ 400 อย่างชัดเจน
-			if (!PRODUCT_TYPES.includes(product_type)) {
-				return res.status(400).json({
-					success: false,
-					message: `product_type must be one of: ${PRODUCT_TYPES.join(", ")}`,
-				});
-			}
-			filter.product_type = product_type;
-		}
+    if (product_type) {
+      if (!PRODUCT_TYPES.includes(product_type)) {
+        return res.status(400).json({
+          success: false,
+          message: `product_type must be one of: ${PRODUCT_TYPES.join(", ")}`,
+        });
+      }
+      filter.product_type = product_type;
+    }
 
-		if (is_popular !== undefined) {
-			// query string จาก URL เป็น string จึงต้องแปลงเป็น boolean ก่อนค้นหา MongoDB
-			if (is_popular !== "true" && is_popular !== "false") {
-				return res.status(400).json({
-					success: false,
-					message: "is_popular must be true or false",
-				});
-			}
-			filter.is_popular = is_popular === "true";
-		}
+    if (is_popular !== undefined) {
+      if (is_popular !== "true" && is_popular !== "false") {
+        return res.status(400).json({
+          success: false,
+          message: "is_popular must be true or false",
+        });
+      }
+      filter.is_popular = is_popular === "true";
+    }
 
-		if (tag) {
-			// MongoDB จะ match tag เดียวที่อยู่ใน array tags ของ product
-			filter.tags = tag;
-		}
+    if (tag) {
+      filter.tags = tag;
+    }
 
-		if (search?.trim()) {
-			// ค้นหาจากทั้งชื่อและคำอธิบายแบบไม่สนใจตัวพิมพ์เล็ก/ใหญ่
-			const searchRegex = new RegExp(escapeRegex(search.trim()), "i");
-			filter.$or = [{ name: searchRegex }, { description: searchRegex }];
-		}
+    if (search?.trim()) {
+      const searchRegex = new RegExp(escapeRegex(search.trim()), "i");
+      filter.$or = [{ name: searchRegex }, { description: searchRegex }];
+    }
 
-		// ส่ง popular และสินค้าที่ขายดีขึ้นก่อน เพื่อรองรับ curated collections ของหน้า Home
-		const products = await Product.find(filter).sort({
-			is_popular: -1,
-			sales_count: -1,
-		});
+    // กำหนดการเรียงเริ่มต้น (สำหรับหน้าบ้านลูกค้า)
+    let sortCondition = { is_popular: -1, sales_count: -1, createdAt: -1 };
 
-		return res.json(products);
-	} catch (err) {
-		next(err);
-	}
+    // ถ้าเป็นแอดมินเรียกดู (มี is_active=all) ให้เรียงจากสินค้าใหม่ล่าสุดขึ้นก่อน
+    if (is_active === "all") {
+      sortCondition = { createdAt: -1 };
+    }
+
+    const products = await Product.find(filter)
+      .populate("components.inventory_item_id", "name category cost_price")
+      .sort(sortCondition); // เอาตัวแปร sortCondition มาใส่แทน
+
+    return res.status(200).json({ success: true, data: products });
+  } catch (err) {
+    next(err);
+  }
 }
 
 export async function getProductById(req, res, next) {
-	try {
-		// ตรวจ id ก่อน query เพื่อคืน 400 แทนปล่อย CastError ไปเป็น server error
-		if (!mongoose.isValidObjectId(req.params.id)) {
-			return res.status(400).json({
-				success: false,
-				message: "Invalid product id",
-			});
-		}
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid product id" });
+    }
 
-		const product = await Product.findById(req.params.id);
-		if (!product) {
-			// id ถูกต้องแต่ไม่มี document ต้องแยกเป็น 404
-			return res.status(404).json({
-				success: false,
-				message: "Product not found",
-			});
-		}
+    const product = await Product.findById(req.params.id).populate(
+      "components.inventory_item_id",
+      "name category cost_price",
+    ); // เพิ่ม populate ตรงนี้ด้วยเผื่อเรียกดูสินค้าชิ้นเดียว
 
-		return res.json(product);
-	} catch (err) {
-		next(err);
-	}
+    if (!product) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Product not found" });
+    }
+
+    // ปรับรูปแบบข้อมูลให้ตรงกัน
+    return res.status(200).json({ success: true, data: product });
+  } catch (err) {
+    next(err);
+  }
 }
+
+// สร้างสินค้าใหม่
+export const createProduct = async (req, res) => {
+  try {
+    const newProduct = new Product(req.body);
+    const savedProduct = await newProduct.save();
+
+    res.status(201).json({ success: true, data: savedProduct });
+  } catch (error) {
+    res.status(400).json({
+      success: false,
+      message: "Validation Error",
+      error: error.message,
+    });
+  }
+};
+
+// อัปเดตข้อมูลสินค้า (PUT)
+export const updateProduct = async (req, res) => {
+  try {
+    // findByIdAndUpdate จะหาตาม ID แล้วอัปเดตข้อมูลให้
+    const updatedProduct = await Product.findByIdAndUpdate(
+      req.params.id,
+      req.body,
+      { returnDocument: "after", runValidators: true }, // เปลี่ยนตรงนี้เพื่อให้ส่งข้อมูลก้อนใหม่กลับมาตามที่ Mongoose แนะนำ
+    );
+
+    if (!updatedProduct) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Product not found" });
+    }
+
+    res.status(200).json({ success: true, data: updatedProduct });
+  } catch (error) {
+    res.status(400).json({
+      success: false,
+      message: "Update failed.",
+      error: error.message,
+    });
+  }
+};
+
+// ลบสินค้า (DELETE)
+export const deleteProduct = async (req, res) => {
+  try {
+    const deletedProduct = await Product.findByIdAndDelete(req.params.id);
+
+    if (!deletedProduct) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Product not found" });
+    }
+
+    res
+      .status(200)
+      .json({ success: true, message: "Delete Product Successfully" });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Delete Prodouct Failed",
+      error: error.message,
+    });
+  }
+};
