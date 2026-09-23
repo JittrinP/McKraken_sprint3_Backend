@@ -20,6 +20,11 @@ const cartItemSchema = new mongoose.Schema({
   quantity: { type: Number, required: true, min: 1, default: 1 },
   //ใช้กับ custom เท่านั้น
   custom_specs: {
+    // _id ของ design ที่เซฟไว้ (user.saved_custom_designs) ที่กด Add to cart มา ไม่บังคับ (ช่อที่กดจากหน้า Home ตรงๆ ไม่มี)
+    // ใช้แค่โยงกลับ: ให้หน้า CustomList รู้ว่าช่อไหนอยู่ในตะกร้าแล้ว + กดซ้ำให้บวกจำนวนแทนสร้างรายการใหม่
+    // ไม่ใส่ ref เพราะ design เป็น subdocument ใน user ไม่มี collection ของตัวเองให้ populate
+    // สูตรช่อ (design_name, components) ยังต้องเก็บเป็นสำเนาเหมือนเดิม ถ้า design ถูกแก้/ลบทีหลัง ช่อในตะกร้าจะไม่เปลี่ยนตาม
+    design_id: { type: mongoose.Schema.Types.ObjectId },
     design_name: { type: String, trim: true},
     design_description: { type: String, trim: true },
     components: [
