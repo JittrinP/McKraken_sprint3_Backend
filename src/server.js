@@ -24,6 +24,14 @@ app.use("/api", apiRoutes);
 
 const PORT = 3001;
 
+// Centralized/Global Error Handling Middleware
+app.use((err, req, res, next) => {
+  return res.status(500).json({
+    error: "Something went wrong on the server...",
+    message: err.message,
+  });
+});
+
 async function start() {
   try {
     await connectDB();
