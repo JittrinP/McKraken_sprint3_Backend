@@ -1,15 +1,14 @@
 import { Router } from "express";
 import User from "../../models/user.model.js";
+import { authen } from "../../middleware/authen.js";
 
-// mergeParams: true จำเป็นตรงนี้ เพราะ route ถูก mount ที่ "/user/:userId/address"
-// ถ้าไม่เปิดไว้ req.params.userId จะเป็น undefined เสมอ (Express ไม่ส่ง param จาก path ที่ mount ให้ sub-router โดยอัตโนมัติ)
-export const router = Router({ mergeParams: true });
+export const router = Router();
 
-// GET /api/v1/user/:userId/address
-// ดึงที่อยู่ทั้งหมดของ user คนนั้น (userId มาจาก URL ก่อนเพราะยังไม่มีระบบ auth)
-router.get("/", async (req, res, next) => {
+// GET /api/v1/user/address
+// ดึงที่อยู่ทั้งหมดของ user ที่ login อยู่ (userId มาจาก token ผ่าน authen middleware)
+router.get("/", authen, async (req, res, next) => {
   try {
-    const user = await User.findById(req.params.userId);
+    const user = await User.findById(req.user.userId);
 
     if (!user) {
       return res
@@ -23,9 +22,9 @@ router.get("/", async (req, res, next) => {
   }
 });
 
-// POST /api/v1/user/:userId/address
-// เพิ่มที่อยู่ใหม่ 1 รายการให้ user คนนั้น
-router.post("/", async (req, res, next) => {
+// POST /api/v1/user/address
+// เพิ่มที่อยู่ใหม่ 1 รายการให้ user ที่ login อยู่
+router.post("/", authen, async (req, res, next) => {
   try {
     // 1. รับข้อมูลที่อยู่จาก body
     const {
@@ -48,7 +47,7 @@ router.post("/", async (req, res, next) => {
     }
 
     // 3. หา user จาก userId ก่อน (เหมือน GET)
-    const user = await User.findById(req.params.userId);
+    const user = await User.findById(req.user.userId);
     if (!user) {
       return res
         .status(404)
@@ -89,9 +88,9 @@ router.post("/", async (req, res, next) => {
   }
 });
 
-// PATCH /api/v1/user/:userId/address/:addressId
-// แก้ไขที่อยู่ 1 รายการของ user คนนั้น (ส่งมาแค่ field ที่อยากแก้ก็ได้ ไม่ต้องส่งครบ)
-router.patch("/:addressId", async (req, res, next) => {
+// PATCH /api/v1/user/address/:addressId
+// แก้ไขที่อยู่ 1 รายการของ user ที่ login อยู่ (ส่งมาแค่ field ที่อยากแก้ก็ได้ ไม่ต้องส่งครบ)
+router.patch("/:addressId", authen, async (req, res, next) => {
   try {
     // 1. รับข้อมูลจาก body (field ไหนไม่ส่งมาจะเป็น undefined แล้วข้ามไปเฉยๆ)
     const {
@@ -106,7 +105,7 @@ router.patch("/:addressId", async (req, res, next) => {
     } = req.body;
 
     // 2. หา user จาก userId ก่อน (เหมือน route อื่น)
-    const user = await User.findById(req.params.userId);
+    const user = await User.findById(req.user.userId);
     if (!user) {
       return res
         .status(404)
@@ -151,12 +150,12 @@ router.patch("/:addressId", async (req, res, next) => {
   }
 });
 
-// DELETE /api/v1/user/:userId/address/:addressId
-// ลบที่อยู่ 1 รายการของ user คนนั้น
-router.delete("/:addressId", async (req, res, next) => {
+// DELETE /api/v1/user/address/:addressId
+// ลบที่อยู่ 1 รายการของ user ที่ login อยู่
+router.delete("/:addressId", authen, async (req, res, next) => {
   try {
     // 1. หา user จาก userId ก่อน (เหมือน GET/POST)
-    const user = await User.findById(req.params.userId);
+    const user = await User.findById(req.user.userId);
     if (!user) {
       return res
         .status(404)
