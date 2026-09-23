@@ -3,19 +3,14 @@ import Cart from "../../models/cart.model.js";
 import "../../models/product.model.js";
 import "../../models/inventory-items.model.js";
 import { calcCart } from "../../utils/pricing.js";
+import { authen } from "../../middleware/authen.js";
 
 export const router = Router();
 
 // getCarts Controller
-router.get("/", async (req, res, next) => {
+router.get("/", authen , async (req, res, next) => {
   try {
-    //รอมี auth ก่อนจะต้องใช้ req.user._id แต่ตอนนี้ไม่มีเลยใช้ req.query ไปก่อน
-    const { user_id } = req.query;
-    if (!user_id) {
-      return res
-        .status(400)
-        .json({ success: false, message: "user_id is required" });
-    }
+    const user_id = req.user.userId;
 
     //populate คือเอาจากตัวที่ ref มา string แรก = path ที่มี ref, string ที่ 2 = field ที่จะเอาจาก Product ที่ดึงมา ถ้าไม่ใส่ก็ดึงมาหมด
     const cart = await Cart.findOne({ user_id })
@@ -47,19 +42,14 @@ router.get("/", async (req, res, next) => {
 });
 
 // pushCarts Controller
-router.post("/", async (req, res, next) => {
+router.post("/", authen , async (req, res, next) => {
   try {
-    const {
-      user_id,
-      item_type,
-      product_id,
-      quantity = 1,
-      custom_specs,
-    } = req.body;
-    if (!user_id || !item_type || !quantity) {
+    const user_id = req.user.userId;
+    const { item_type, product_id, quantity = 1, custom_specs } = req.body;
+    if (!item_type || !quantity) {
       return res.status(400).json({
         success: false,
-        message: "Please fill user_id , item_type",
+        message: "Please fill item_type",
       });
     }
 
@@ -126,13 +116,14 @@ router.post("/", async (req, res, next) => {
 });
 
 // patchGiftNote Controller (gift_note เป็นของทั้งตะกร้า ไม่ใช่ต่อ item)
-router.patch("/", async (req, res, next) => {
+router.patch("/", authen , async (req, res, next) => {
   try {
-    const { user_id, gift_note } = req.body;
-    if (!user_id || typeof gift_note !== "string") {
+    const user_id = req.user.userId;
+    const { gift_note } = req.body;
+    if (typeof gift_note !== "string") {
       return res.status(400).json({
         success: false,
-        message: "user_id and gift_note (string) are required",
+        message: "gift_note (string) is required",
       });
     }
 
@@ -152,13 +143,14 @@ router.patch("/", async (req, res, next) => {
   }
 });
 
-router.patch("/:itemId", async (req, res, next) => {
+router.patch("/:itemId",authen , async (req, res, next) => {
   try {
-    const { user_id, quantity } = req.body;
-    if (!user_id || !Number.isInteger(quantity) || quantity < 0) {
+    const user_id = req.user.userId;
+    const { quantity } = req.body;
+    if (!Number.isInteger(quantity) || quantity < 0) {
       return res.status(400).json({
         success: false,
-        message: "user_id and quantity ≥ 0 are required",
+        message: "quantity ≥ 0 is required",
       });
     }
 
@@ -191,14 +183,9 @@ router.patch("/:itemId", async (req, res, next) => {
 // clearCart Controller (เก็บ document ตะกร้าไว้ ล้างแค่ items กับ gift_note)
 //ใช้เมื่อไหร่ 1. ปุ่ม "Clear cart" / "ล้างตะกร้า" ในหน้า Cart ถ้า frontend ออกแบบให้มี 2. หลัง Confirm Order แต่กรณีนี้ ไม่ควรให้ frontend เรียก endpoint นี้ ให้ backend ล้างเองในขั้นตอนสร้าง order (ตามที่คุยกันก่อนหน้า) เพราะถ้าให้ frontend เรียกแยก แล้วเรียกไม่สำเร็จ ตะกร้าจะค้างหลังสั่งซื้อไปแล้ว
 
-router.delete("/", async (req, res, next) => {
+router.delete("/", authen , async (req, res, next) => {
   try {
-    const { user_id } = req.body;
-    if (!user_id) {
-      return res
-        .status(400)
-        .json({ success: false, message: "user_id is required" });
-    }
+    const user_id = req.user.userId;
 
     // $set คือ update operator ของ MongoDB แปลว่า "ตั้งค่า field เหล่านี้ให้เป็นค่าที่ระบุ" field อื่นที่ไม่ได้เขียนถึง (เช่น user_id, _id, createdAt) จะไม่ถูกแตะ
     const cart = await Cart.findOneAndUpdate(
@@ -220,14 +207,9 @@ router.delete("/", async (req, res, next) => {
   }
 });
 
-router.delete("/:itemId", async (req, res, next) => {
+router.delete("/:itemId", authen , async (req, res, next) => {
   try {
-    const { user_id } = req.body;
-    if (!user_id) {
-      return res
-        .status(400)
-        .json({ success: false, message: "user_id is required for delete" });
-    }
+    const user_id = req.user.userId;
 
     const cart = await Cart.findOne({ user_id });
     if (!cart) {

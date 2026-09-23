@@ -4,9 +4,6 @@ import { connectDB } from "./config/db.js";
 import cookieParser from "cookie-parser";
 import cors from "cors";
 
-// Import authRoutes
-import authRoutes from "./routes/v1/auth.routes.js";
-
 const app = express();
 
 const corsOptions = {
@@ -24,8 +21,6 @@ app.use(express.json());
 app.use(cookieParser());
 
 app.use("/api", apiRoutes);
-// ตั้ง URL ของ authRoutes
-app.use("/api/v1/auth", authRoutes);
 
 const PORT = 3001;
 
