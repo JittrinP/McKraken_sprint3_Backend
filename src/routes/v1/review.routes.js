@@ -1,0 +1,14 @@
+import { Router } from "express"; // ใช้สร้าง route ย่อยของ /review
+import Review from "../../models/review.model.js"; // model ของรีวิวลูกค้า
+
+export const router = Router();
+
+// GET เท่านั้นตามที่ตกลงกัน ไม่มี POST/PATCH/DELETE เพราะรีวิวถูก seed เข้าตรงๆ ไม่ได้ให้ user สร้างผ่าน frontend
+router.get("/", async (req, res, next) => {
+  try {
+    const reviews = await Review.find(); // ดึงรีวิวทั้งหมดกลับมา ไม่ filter/sort เพราะ frontend สุ่มเลือกเองฝั่ง client
+    return res.json(reviews);
+  } catch (err) {
+    next(err); // ส่งต่อให้ error handler กลาง จัดการ
+  }
+});
