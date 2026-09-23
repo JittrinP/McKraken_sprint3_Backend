@@ -4,7 +4,6 @@ import mongoose from "mongoose";
 // 1. Sub-schemas สำหรับข้อมูลการจัดส่ง (Delivery Info)
 // ----------------------------------------------------------------
 
-// ล็อคโครงสร้างที่อยู่จัดส่งให้มีฟิลด์ตายตัวและบังคับกรอก
 const addressSchema = new mongoose.Schema(
 	{
 		address_line: {
@@ -69,7 +68,7 @@ const deliveryInfoSchema = new mongoose.Schema(
 // 2. Sub-schemas สำหรับรายละเอียดสินค้า (Items & Custom Specs)
 // ----------------------------------------------------------------
 
-// Snapshot ของ Component ที่ดึงมาจาก Inventory สำหรับการจัดช่อดอกไม้เอง
+// Snapshot ของ Component ที่ดึงมาจาก Inventory
 const componentSnapshotSchema = new mongoose.Schema(
 	{
 		inventory_item_id: {
@@ -96,9 +95,17 @@ const componentSnapshotSchema = new mongoose.Schema(
 	{ _id: false }
 );
 
-// รายละเอียดสเปคของ Custom Bouquet
+// ปรับให้รองรับ design_name และ design_description เหมือนกับ cart.model.js
 const customSpecsSchema = new mongoose.Schema(
 	{
+		design_name: {
+			type: String,
+			trim: true,
+		},
+		design_description: {
+			type: String,
+			trim: true,
+		},
 		components: {
 			type: [componentSnapshotSchema],
 			default: [],
@@ -112,19 +119,19 @@ const customSpecsSchema = new mongoose.Schema(
 	{ _id: false }
 );
 
-// Snapshot ของแต่ละ Item ในคำสั่งซื้อ ณ เวลาที่ทำการสั่ง
+// Snapshot ของแต่ละ Item ในคำสั่งซื้อ
 const orderItemSchema = new mongoose.Schema(
 	{
 		item_type: {
 			type: String,
-			enum: ["standard_product", "custom_bouquet"],
+			// ปรับ enum เป็น custom_product ให้ตรงกับ cart.model.js
+			enum: ["standard_product", "custom_product"],
 			required: true,
 		},
 		product_id: {
 			type: mongoose.Schema.Types.ObjectId,
 			ref: "Product",
 			required: function () {
-				// บังคับให้ต้องมี product_id อ้างอิงตาราง Product ก็ต่อเมื่อเป็น standard_product
 				return this.item_type === "standard_product";
 			},
 		},
@@ -146,8 +153,8 @@ const orderItemSchema = new mongoose.Schema(
 		custom_specs: {
 			type: customSpecsSchema,
 			required: function () {
-				// บังคับให้ต้องมีรายละเอียดจาก Inventory ก็ต่อเมื่อเป็น custom_bouquet
-				return this.item_type === "custom_bouquet";
+				// ปรับเงื่อนไขให้ตรงกับ custom_product
+				return this.item_type === "custom_product";
 			},
 		},
 	},
@@ -170,9 +177,9 @@ const paymentPricingSchema = new mongoose.Schema(
 			required: true,
 			min: 0,
 		},
-		discount: {
+		service_fee: {
 			type: Number,
-			default: 0,
+			required: true,
 			min: 0,
 		},
 		grand_total: {
@@ -191,14 +198,14 @@ const paymentPricingSchema = new mongoose.Schema(
 );
 
 // ----------------------------------------------------------------
-// 4. Main Order Schema (โครงสร้างหลักของคำสั่งซื้อ)
+// 4. Main Order Schema
 // ----------------------------------------------------------------
 
 const orderSchema = new mongoose.Schema(
 	{
 		user_id: {
 			type: mongoose.Schema.Types.ObjectId,
-			ref: "User", // อ้างอิงไปยังตาราง User (อิงตาม ER Diagram)
+			ref: "User",
 			required: true,
 		},
 		order_number: {
@@ -221,6 +228,12 @@ const orderSchema = new mongoose.Schema(
 			type: [orderItemSchema],
 			required: true,
 		},
+		// เพิ่ม gift_note เพื่อรองรับข้อมูลการ์ดอวยพรจาก Cart
+		gift_note: {
+			type: String,
+			trim: true,
+			maxlength: 200,
+		},
 		payment_pricing: {
 			type: paymentPricingSchema,
 			required: true,
@@ -228,12 +241,12 @@ const orderSchema = new mongoose.Schema(
 	},
 	{
 		collection: "orders",
-		timestamps: true, // สร้าง createdAt และ updatedAt ให้อัตโนมัติ
+		timestamps: true,
 	}
 );
 
 // ----------------------------------------------------------------
-// 5. Indexes (สำหรับการเพิ่มประสิทธิภาพการค้นหา)
+// 5. Indexes
 // ----------------------------------------------------------------
 
 orderSchema.index({ user_id: 1 });
