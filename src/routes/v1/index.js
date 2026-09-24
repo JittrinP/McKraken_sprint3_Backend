@@ -15,8 +15,8 @@ export const routes = Router();
 routes.use("/blog", blogRoutes);
 routes.use("/cart", cartRoutes);
 routes.use("/payments", paymentRoutes);
-// userId อยู่ใน path ตรงนี้เลย เพราะ address เป็นข้อมูลที่ฝังอยู่ใน user (ไม่ใช่ collection แยกเหมือน blog)
-routes.use("/user/:userId/address", addressRoutes);
+// userId มาจาก token (authen) ข้างในแล้ว ไม่ต้องฝังไว้ใน path (เหมือน cartRoutes/customDesignRoutes)
+routes.use("/user/address", addressRoutes);
 // ตั้ง URL ของ authRoutes
 routes.use("/auth", authRoutes);
 // userId มาจาก token (authen) ข้างในแล้ว ไม่ต้องฝังไว้ใน path
