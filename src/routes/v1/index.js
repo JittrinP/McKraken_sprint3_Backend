@@ -33,5 +33,10 @@ routes.use("/products", productRoutes);
 // Mount path สำหรับ inventory-items
 // จะได้ endpoint เป็น /api/v1/inventory-items
 routes.use("/inventory-items", inventoryItemRoutes);
-// order ของทุก user สำหรับหน้า Admin OrderList (ต้องเป็น admin เท่านั้น เช็คใน route)
-routes.use("/admin/orders", orderRoutes);
+
+// [UPDATE] แก้ไขจาก /admin/orders เป็น /orders เพื่อให้ใช้ได้ทั้งฝั่ง Customer และ Admin
+// จะได้ endpoint ดังนี้:
+// - Customer: /api/v1/orders/my-orders (ดูประวัติ)
+// - Customer: /api/v1/orders/:orderId/cancel (ยกเลิกออเดอร์)
+// - Admin:    /api/v1/orders/ (ดูออเดอร์ทั้งหมด - เช็คสิทธิ์ admin ข้างใน)
+routes.use("/orders", orderRoutes);
