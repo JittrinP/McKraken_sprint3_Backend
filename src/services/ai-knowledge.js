@@ -9,11 +9,12 @@ import { embedText } from "./gemini.client.js";
 // เรียกใช้จาก scripts/sync-ai-knowledge.js
 
 // แปลงค่า enum ใน DB ให้อ่านรู้เรื่อง (AI เข้าใจ "Bouquet set" ดีกว่า "bouquet_set")
-const PRODUCT_TYPE_LABELS = {
+// export ให้ ai.routes.js ใช้ตอนสร้าง context ด้วย
+export const PRODUCT_TYPE_LABELS = {
   bouquet_set: "Bouquet set",
   single_item: "Single item",
 };
-const INVENTORY_CATEGORY_LABELS = {
+export const INVENTORY_CATEGORY_LABELS = {
   flower: "Flower",
   wrapping_paper: "Wrapping paper",
   vase: "Vase",

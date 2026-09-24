@@ -268,6 +268,7 @@ GEMINI_API_KEY=...
 GEMINI_API_BASE_URL=https://generativelanguage.googleapis.com
 GEMINI_EMBEDDING_MODEL=gemini-embedding-001   # 3072 dims ต้องตรงกับ numDimensions ของ index
 GEMINI_GENERATION_MODEL=gemini-2.5-flash
+GEMINI_DESIGN_MODEL=gemini-3.5-flash           # ไม่บังคับ: model สำหรับคำถามจัดช่อ/งบ (ไม่ตั้ง = gemini-3.5-flash)
 GEMINI_HTTP_TIMEOUT_MS=15000
 GEMINI_TEMPERATURE=0.2
 ```
@@ -351,7 +352,6 @@ const [error, setError] = useState("");
 | backend | `src/routes/v1/ai.routes.js` | ใหม่ | base |
 | backend | `src/test_http/ai-api-test.rest` | ใหม่ | base |
 | backend | `src/routes/v1/index.js` | แก้ 2 บรรทัด (import + `routes.use("/ai", ...)`) | ไฟล์กลาง |
-| backend | `package.json` | เพิ่ม `express-rate-limit` | ไฟล์กลาง |
 | frontend | `src/lib/aiApi.js`, `src/components/ChatWidget.jsx`, `src/components/SyncAiButton.jsx` | ใหม่ | base |
 | frontend | `src/components/Layout.jsx` | แก้ 1-2 บรรทัด | ไฟล์กลาง |
 | frontend | `admin_dashboard/_components/ProductEdit.jsx` | ใส่ `<SyncAiButton />` 1-2 บรรทัด | เพื่อน (product) |
@@ -374,9 +374,30 @@ const [error, setError] = useState("");
 - [x] ลอง `$vectorSearch` คำถามไทย: "ช่อให้แม่ วันแม่" → Pink Carnation Mother's Joy อันดับ 1 / "ทิวลิปชมพูทำช่อเอง" → inventory Pink Tulip อันดับ 1
 - [ ] ⚠️ แจ้งเพื่อน product: มีสินค้าเทส `test product 67` (2 ตัว), `sdfgsd` ยัง `is_active: true` → ลบ/ปิดขาย แล้ว sync ใหม่
 
-**Phase 3 — Route ข้อมูลร้านอย่างเดียว**
-- [ ] `POST /ai/ask` ขั้น 1–3, 5 (ยังไม่ใส่ข้อมูลส่วนตัว / history) + authen + rate limit
-- [ ] ทดสอบ `.rest`: คำถามสินค้า, คำถามดอกไม้, ค่าส่ง, คำถามนอกเรื่อง (ต้องตอบไม่ทราบ), question ว่าง (400), ไม่ login (401)
+**Phase 3 — Route ข้อมูลร้านอย่างเดียว** ✅ (2026-09-24)
+- [x] `POST /ai/ask` ขั้น 1–3, 5 (ยังไม่ใส่ข้อมูลส่วนตัว / history) + authen + rate limit
+- [x] ทดสอบ: คำถามสินค้า, ราคาช่อ custom, ค่าส่ง, นอกเรื่อง (ตอบไม่ทราบ), question ว่าง (400), ไม่ login (401) — ตอบ ~1.5–3 วินาที
+- [x] `src/test_http/ai-api-test.rest`
+
+สิ่งที่เปลี่ยนจากแผนเดิม (เจอตอนทดสอบ):
+- **ค้นแยก 2 ประเภท** (product 4 + inventory 4 ด้วย filter `source_type`) แทนค้นรวม 6 — ค้นรวมแล้วสินค้าสำเร็จรูปแย่งที่วัตถุดิบ ("ทิวลิป + กระดาษคราฟท์" หากระดาษคราฟท์ไม่เจอ)
+- **`sources` คืนเฉพาะของที่ AI เอ่ยชื่อในคำตอบ** (ถ้า `answer = null` คืนทั้งหมด) — ตั้ง min score ไม่ได้ เพราะคะแนนของเกี่ยว (~0.80–0.83) กับไม่เกี่ยว (~0.82) เหลื่อมกัน
+- **prompt บังคับแสดงวิธีคิดราคาทีละบรรทัด** — `flash-lite` เคยบอกค่าส่ง ฿150 (ผิด) ทั้งที่ยอดรวมถูก
+- **rate limit เขียนเอง** (Map ใน memory, 10 ครั้ง/นาที/user) แทน `express-rate-limit` → ไม่ต้องแก้ `package.json` (ใช้ได้เพราะ server ตัวเดียว)
+- **ภาษาตัดสินในโค้ด** (มีตัวอักษรไทย `\u0E00-\u0E7F` → "Answer in Thai" ไม่งั้น English) — ให้ AI เดาเองแล้วเพี้ยนไปมา
+
+**เพิ่ม: AI จัดช่อ custom ตามงบ** (ตกลง 2026-09-24)
+- ลูกค้าขอ "ช่วยจัดช่อ custom ... งบ X" → AI แนะนำสูตร 1 สูตร (base 1 + ดอกไม้ 1–3 ชนิด) พร้อมวิธีคิดราคา
+- **งบ = วัตถุดิบ + service fee ไม่รวมค่าส่ง** (ค่าส่งบอกแยกท้ายคำตอบ)
+- ถามหา "ช่อแนะนำ" เฉยๆ (ไม่ได้ขอ custom) → แนะนำสินค้าสำเร็จรูปก่อน
+- ส่ง base ทุกตัว (wrapping_paper + vase, ตอนนี้ 5 ตัว) ให้ AI เสมอ + ค้นดอกไม้ 6 ตัว (product 4)
+- context ของวัตถุดิบมี `role: base / flower`
+- AI แค่แนะนำสูตร ลูกค้าต้องไปประกอบเองในหน้า Home (ปุ่ม "ใช้สูตรนี้" = phase เสริม ต้องให้ AI ส่ง JSON)
+
+**เพิ่ม: แยก model ตามคำถาม**
+- ทดสอบ prompt เดียวกัน: `gemini-3.5-flash-lite` จัดช่อตามงบผิด (งบ 300 ตอบว่า "งบน้อยเกินไป", งบ 150 บอกจัดไม่ได้) / `gemini-3.5-flash` ถูกทุกข้อ (฿287, ฿144) แต่ช้ากว่า (~4–10 วิ vs ~2 วิ)
+- คำถามมีคำว่า จัดช่อ / ออกแบบช่อ / ทำช่อ / งบ / custom / design / arrange / budget → `GEMINI_DESIGN_MODEL` (ไม่ตั้ง = `gemini-3.5-flash`) ที่เหลือ → `GEMINI_GENERATION_MODEL`
+- ถ้า model ใหญ่พัง (เจอ `answer: null` 1 ครั้งตอนยิงถี่ น่าจะ rate limit ต่อนาทีของ free tier) → fallback ไปตอบด้วย model ปกติ
 
 **Phase 4 — ข้อมูลส่วนตัว + ความจำ**
 - [ ] เพิ่ม CUSTOMER DATA (cart + saved designs) จาก `req.user.userId`
