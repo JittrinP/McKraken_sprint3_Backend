@@ -106,6 +106,20 @@ router.post("/", authen , async (req, res, next) => {
         message: "Product already in cart , use PATCH to change quantity",
       });
     }
+
+    //ช่อ custom ที่มาจาก design ที่เซฟไว้ (มี design_id) ก็ห้ามซ้ำเหมือนกัน ให้ไปใช้ patch ปรับจำนวน
+    //ช่อที่ไม่มี design_id (กดจากหน้า Home ตรงๆ) เพิ่มซ้ำได้ตามปกติ
+    const designId = custom_specs?.design_id;
+    if (
+      item_type === "custom_product" &&
+      designId &&
+      cart.items.some((i) => String(i.custom_specs?.design_id) === String(designId))
+    ) {
+      return res.status(409).json({
+        success: false,
+        message: "Design already in cart , use PATCH to change quantity",
+      });
+    }
     cart.items.push(newItem);
     // cart.save() คือสั่งให้แก้ลง MongoDB และตรวจ schema
     await cart.save();
