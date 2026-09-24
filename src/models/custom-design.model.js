@@ -10,6 +10,11 @@ export const savedCustomDesignSchema = new mongoose.Schema(
     // คำบรรยายช่อ ไม่บังคับ (ชื่อเดียวกับ cart.custom_specs.design_description)
     design_description: { type: String, trim: true },
 
+    // ช่องเซฟ 1-5 (user 1 คนมีได้สูงสุด 5 ช่อ, เลขห้ามซ้ำ route เป็นคนเช็ค)
+    // ไม่ใส่ required ใน schema เพราะ design เก่าที่ยังไม่มี preset จะทำให้ user.save() พังทั้งก้อน (เช่นตอนแก้ address)
+    // POST/PATCH ใน custom-design.routes.js บังคับให้ส่ง preset มาแทน
+    preset: { type: Number, min: 1, max: 5 },
+
     components: {
       type: [
         {

@@ -120,6 +120,7 @@ export const login = async (req, res) => {
         email: user.email,
         role: user.role,
         profile: user.profile,
+        shipping_addresses: user.shipping_addresses,
       },
     });
   } catch (error) {
