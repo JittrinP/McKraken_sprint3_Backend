@@ -410,17 +410,20 @@ const [error, setError] = useState("");
 - หมายเหตุ: `flash-lite` เคยพ่นคำเกาหลีปนชื่อดอกไม้ 1 ครั้ง (ถามซ้ำ 2 รอบไม่เกิดอีก) = อาการพลาดนานๆ ครั้งของ model
 - หมายเหตุ: ตะกร้าของบัญชี B มีสินค้าที่ถูกลบไปแล้ว → AI ตอบ "(product no longer available) ฿0" ตรงตามข้อมูล (เป็นบัค cart ที่ค้างไว้ ข้อ 🔴 2)
 
-**Phase 5 — Frontend**
-- [ ] `aiApi.js` (axios `api`)
-- [ ] `ChatWidget.jsx` + ใส่ใน `Layout.jsx`
-- [ ] ทดสอบมือถือ / desktop, logout แล้วแชทหาย, token หมดอายุแล้วยังถามต่อได้
+**Phase 5 — Frontend** (frontend branch `AIchatBot`)
+- [x] `aiApi.js` (axios `api` → refresh token อัตโนมัติ)
+- [x] `ChatWidget.jsx` + ใส่ใน `Layout.jsx` (build ผ่าน)
+- [x] desktop ตอนยังไม่ login: ปุ่ม ✨ มุมขวาล่าง, กล่องแชทลอยเหนือปุ่ม, ขึ้น "Please log in"
+- [x] ทดสอบตอน login จริง (base ทดสอบเอง 2026-09-24): ถาม, ปุ่มคำถามตัวอย่าง, การ์ดสินค้า, ถามต่อเนื่อง, "Typing..." ตอนจัดช่อ, มือถือ, logout แล้วแชทหาย
+- [ ] ทิ้งไว้ >15 นาทีแล้วยังถามต่อได้ (refresh token) — ยังไม่ได้ลอง
+- หมายเหตุ: หน้า Home ไม่มี `id="customDesign"` → การ์ดวัตถุดิบลิงก์ไป `/` เฉยๆ (ลิงก์ `#customDesign` ใน CustomList ก็เลื่อนไม่ได้เหมือนกัน)
 
-**Phase 6 — ปุ่ม Sync AI สำหรับ admin**
-- [ ] `POST /ai/sync` (`authen` + `authorize(["admin"])` + กันกดซ้ำ 409)
-- [ ] ทดสอบ `.rest`: admin ได้ผลสรุป / customer ได้ 403 / ไม่ login ได้ 401
-- [ ] `SyncAiButton.jsx` + `syncAiKnowledge()` ใน `aiApi.js`
-- [ ] คุยกับเพื่อน product แล้วใส่ `<SyncAiButton />` ใน `ProductEdit.jsx`
-- [ ] ทดสอบ: admin เพิ่มสินค้าใหม่ → ถาม AI ไม่เจอ → กด Sync → ถามใหม่เจอ
+**Phase 6 — ปุ่ม Sync AI สำหรับ admin** (2026-09-24)
+- [x] `POST /ai/sync` (`authen` + `authorize(["admin"])` + กันกดซ้ำ 409 + `finally` ปลดล็อกเสมอ)
+- [x] ทดสอบ: ไม่ login 401 / customer 403 / admin 200 `{ embedded: 0, skipped: 54, failed: 0, removed: 0, seconds: 2.1 }` / กดพร้อมกัน 2 ครั้ง → 200 + 409
+- [x] `SyncAiButton.jsx` + `syncAiKnowledge()` ใน `aiApi.js`
+- [x] เพื่อน product อนุญาตแล้ว → ใส่ `<SyncAiButton />` ข้างปุ่ม Add item ใน `ProductEdit.jsx` (แสดงทั้งแท็บ Products และ Inventory) build ผ่าน
+- [ ] ทดสอบในเบราว์เซอร์ (admin): เพิ่มสินค้าใหม่ → ถาม AI ไม่เจอ → กด Sync AI → ถามใหม่เจอ
 
 **Phase 7 — Deploy**
 - [ ] env บน Render, รัน sync กับ DB production, เช็ค index READY บน Atlas

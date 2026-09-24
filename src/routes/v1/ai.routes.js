@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { authen } from "../../middleware/authen.js";
+import { authorize } from "../../middleware/authorize.js";
 import AiKnowledge from "../../models/ai-knowledge.model.js";
 import Product from "../../models/product.model.js";
 import InventoryItem from "../../models/inventory-items.model.js";
@@ -9,6 +10,7 @@ import { embedText, generateText } from "../../services/gemini.client.js";
 import {
   PRODUCT_TYPE_LABELS,
   INVENTORY_CATEGORY_LABELS,
+  syncAiKnowledge,
 } from "../../services/ai-knowledge.js";
 import {
   SERVICE_FEE,
@@ -428,5 +430,37 @@ router.post("/ask", authen, limitAskRate, async (req, res, next) => {
         .json({ success: false, message: "AI is not available right now. Please try again." });
     }
     next(err);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/v1/ai/sync — ปุ่ม "Sync AI" ในหน้า Admin (ดู AI_CHATBOT_PLAN.md ข้อ 4.9)
+// admin กดหลังเพิ่ม / แก้ / ลบสินค้า ให้ AI รู้จักข้อมูลล่าสุด
+// ใช้ syncAiKnowledge() ตัวเดียวกับ scripts/sync-ai-knowledge.js (ไม่เขียน logic ซ้ำ)
+// ตัวที่ข้อความไม่เปลี่ยนจะข้าม → ปกติเสร็จในไม่กี่วินาที แต่หลังรัน seed ใหม่ (embed ทั้งร้าน) ~45 วินาที
+// ---------------------------------------------------------------------------
+
+// กันกดซ้ำตอนกำลัง sync อยู่ (เช่น admin กด 2 ครั้ง / admin 2 คนกดพร้อมกัน) ไม่งั้นจะ embed ซ้ำเปลืองโควตา
+let isSyncing = false;
+
+router.post("/sync", authen, authorize(["admin"]), async (req, res, next) => {
+  if (isSyncing) {
+    return res
+      .status(409)
+      .json({ success: false, message: "Sync is already running. Please wait." });
+  }
+
+  isSyncing = true;
+  try {
+    const startedAt = Date.now();
+    // log: () => {} = ไม่ต้องพิมพ์ทีละบรรทัดลง console ของ server (script ถึงจะพิมพ์)
+    const summary = await syncAiKnowledge({ log: () => {} });
+    const seconds = Number(((Date.now() - startedAt) / 1000).toFixed(1));
+    return res.json({ success: true, data: { ...summary, seconds } });
+  } catch (err) {
+    next(err);
+  } finally {
+    // finally = ทำเสมอ ไม่ว่าสำเร็จหรือพัง ไม่งั้นถ้า sync พังครั้งเดียว ปุ่มจะติด 409 ตลอดไป
+    isSyncing = false;
   }
 });
