@@ -32,6 +32,11 @@ export const savedCustomDesignSchema = new mongoose.Schema(
         message: "components must have at least 1 item",
       },
     },
+
+    // รูป AI preview ของช่อนี้ (ไม่บังคับ) เก็บบน Vercel Blob ที่นี่เก็บแค่ URL (ดู services/preview-image-store.js)
+    preview_image_url: { type: String, trim: true },
+    // template รุ่นไหนสร้างรูปนี้ (PROMPT_VERSION ใน preview-prompt.js) ไว้ debug
+    preview_prompt_version: { type: String, trim: true },
   },
   // timestamps: true ให้ mongoose ใส่ createdAt / updatedAt ให้แต่ละ design (mock เดิมใช้ created_at)
   // ส่วน _id ของแต่ละ design mongoose สร้างให้เอง ใช้ตอน edit/delete รายการเดียว
