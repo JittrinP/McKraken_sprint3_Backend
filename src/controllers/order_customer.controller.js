@@ -1,13 +1,103 @@
 import Order from "../models/order.model.js";
+import Cart from "../models/cart.model.js";
+import { calcCart } from "../utils/pricing.js";
 
 // ==========================================
-// 1. ดึงประวัติการสั่งซื้อทั้งหมดของตัวเอง (GET /my-orders)
+// 1. สร้าง Order ใหม่เมื่อจ่ายเงินสำเร็จ (POST /)
+// ==========================================
+export const createOrder = async (req, res, next) => {
+  try {
+    const userId = req.user.userId;
+    const { delivery_info, gift_note } = req.body;
+
+    // หาตะกร้าของ User
+    const cart = await Cart.findOne({ user_id: userId })
+      .populate("items.product_id")
+      .populate("items.custom_specs.components.inventory_item_id");
+
+    if (!cart || cart.items.length === 0) {
+      return res.status(400).json({ success: false, message: "Cart is empty" });
+    }
+
+    // คำนวณราคาด้วย utils/pricing.js
+    const pricing = calcCart(cart);
+
+    // Map รายการสินค้าใน cart ให้กลายเป็น snapshot ของ orderItemSchema
+    const orderItems = cart.items.map((item) => {
+      if (item.item_type === "standard_product") {
+        return {
+          item_type: "standard_product",
+          product_id: item.product_id._id,
+          item_name: item.product_id.name,
+          quantity: item.quantity,
+          unit_price: item.product_id.base_price,
+        };
+      } else {
+        return {
+          item_type: "custom_product",
+          item_name: item.custom_specs?.design_name || "Custom Bouquet",
+          quantity: item.quantity,
+          unit_price: item.unit_price || 0,
+          custom_specs: {
+            design_name: item.custom_specs?.design_name,
+            design_description: item.custom_specs?.design_description,
+            assembly_fee: item.custom_specs?.assembly_fee || 0,
+            components: (item.custom_specs?.components || []).map((c) => ({
+              inventory_item_id: c.inventory_item_id._id,
+              name: c.inventory_item_id.name,
+              quantity: c.quantity,
+              unit_price: c.inventory_item_id.cost_price || 0,
+            })),
+          },
+        };
+      }
+    });
+
+    // สร้าง order_number รูปแบบ ORD-YYYYMMDD-XXXX
+    const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+    const randomNum = Math.floor(1000 + Math.random() * 9000);
+    const orderNumber = `ORD-${dateStr}-${randomNum}`;
+
+    // บันทึกลง Database
+    const newOrder = await Order.create({
+      user_id: userId,
+      order_number: orderNumber,
+      order_status: "pending",
+      delivery_info,
+      items: orderItems,
+      gift_note: gift_note || cart.gift_note || "",
+      payment_pricing: {
+        subtotal: pricing.subtotal,
+        delivery_fee: pricing.delivery_fee,
+        service_fee: pricing.service_fee,
+        grand_total: pricing.total,
+        payment_status: "paid", // ชำระผ่าน Stripe/PromptPay สำเร็จแล้ว
+      },
+    });
+
+    // เคลียร์สินค้าในตะกร้าหลังสั่งซื้อสำเร็จ
+    cart.items = [];
+    cart.gift_note = "";
+    await cart.save();
+
+    return res.status(201).json({
+      success: true,
+      message: "Order created successfully",
+      order: newOrder,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ==========================================
+// 2. ดึงประวัติการสั่งซื้อทั้งหมดของตัวเอง (GET /my-orders)
 // ==========================================
 export const getMyOrders = async (req, res, next) => {
   try {
     const userId = req.user.userId;
 
-    // populate เฉพาะรายการที่มี product_id จริง เพื่อป้องกัน error
+    // populate เฉพาะรายการที่มี product_id จริง เพื่อป้องกัน error[cite: 29]
     const orders = await Order.find({ user_id: userId })
       .populate({
         path: "items.product_id",
@@ -32,7 +122,7 @@ export const getMyOrders = async (req, res, next) => {
 };
 
 // ==========================================
-// 2. ยกเลิกการสั่งซื้อของตัวเอง (PATCH /:orderId/cancel)
+// 3. ยกเลิกการสั่งซื้อของตัวเอง (PATCH /:orderId/cancel)
 // ==========================================
 export const cancelMyOrder = async (req, res, next) => {
   try {
@@ -45,7 +135,7 @@ export const cancelMyOrder = async (req, res, next) => {
       return res.status(404).json({ success: false, message: "Order not found or unauthorized" });
     }
 
-    // เช็คค่าจาก order_status ให้ตรงกับ Enum ใน order.model.js
+    // [UPDATE] เช็คค่าจาก order_status ให้ตรงกับ Enum ใน order.model.js[cite: 29]
     const unCancellableStatuses = ["shipped", "completed", "cancelled"];
     if (unCancellableStatuses.includes(order.order_status)) {
       return res.status(400).json({
@@ -54,6 +144,7 @@ export const cancelMyOrder = async (req, res, next) => {
       });
     }
 
+    // [UPDATE] เปลี่ยนฟิลด์เป็น order_status[cite: 29]
     order.order_status = "cancelled";
     
     await order.save();
