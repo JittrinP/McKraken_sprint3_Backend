@@ -1,0 +1,111 @@
+### ทดสอบ AI Preview (GET /api/v1/ai/preview/quota, POST /api/v1/ai/preview) — ดู AI_PREVIEW_PLAN.md ข้อ 4.4
+### ใช้ VS Code extension "REST Client" กด "Send Request" ทีละอัน
+### ต้อง login ก่อน (ข้อ 1) แล้ว copy ค่า accessToken จาก header Set-Cookie ของข้อ 1 มาใส่ @token
+### (login ตั้ง cookie เป็น secure: true → REST Client ไม่ส่ง cookie ผ่าน http://localhost ให้เอง ต้องส่งผ่าน header Cookie แทน)
+### token หมดอายุใน 15 นาที → ได้ 401 "Invalid or expired token" ให้ login ใหม่แล้ววาง token ใหม่
+### ⚠️ ข้อ 3.x สร้างรูปจริง = ใช้ quota Cloudflare (~110 neurons/รูป จากฟรี 10,000/วัน) + โควตาของบัญชีนี้ 3 รูป/วัน
+### id วัตถุดิบด้านล่างมาจาก DB ตอน 2026-09-25 ถ้ารัน seed ใหม่ id จะเปลี่ยน ต้องหาใหม่ (GET /inventory-items)
+
+@baseUrl = http://localhost:3001/api/v1
+@token = paste-accessToken-here
+
+@kraft = 6ab0ef63fb9b2838d7c38a2f
+@vase = 6ab0ef63fb9b2838d7c38a37
+@ribbon = 6ab0ef63fb9b2838d7c38a36
+@redRose = 6ab0ef63fb9b2838d7c38a2e
+@pinkCarnation = 6ab0ef63fb9b2838d7c38a35
+@pinkTulip = 6ab0ef63fb9b2838d7c38a30
+@babysBreath = 6ab0ef63fb9b2838d7c38a38
+@eucalyptus = 6ab0ef63fb9b2838d7c38a40
+
+### 1. login (ใส่ email / password ของบัญชีทดสอบของตัวเอง ห้าม commit รหัสจริง)
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "your-test-account@example.com",
+  "password": "your-password"
+}
+
+### 2. ดูโควตา (ควรได้ limit 3, remaining 3 ถ้ายังไม่ได้สร้างรูปวันนี้)
+GET {{baseUrl}}/ai/preview/quota
+Cookie: accessToken={{token}}
+
+### 2.1 ไม่มี base → 400 "Choose exactly 1 base" (ไม่เสียโควตา)
+POST {{baseUrl}}/ai/preview
+Content-Type: application/json
+Cookie: accessToken={{token}}
+
+{
+  "components": [
+    { "inventory_item_id": "{{redRose}}", "quantity": 5 }
+  ]
+}
+
+### 2.2 ดอกซ้ำ / quantity ไม่ใช่เลขเต็ม → 400 (ไม่เสียโควตา)
+POST {{baseUrl}}/ai/preview
+Content-Type: application/json
+Cookie: accessToken={{token}}
+
+{
+  "components": [
+    { "inventory_item_id": "{{kraft}}", "quantity": 1 },
+    { "inventory_item_id": "{{redRose}}", "quantity": 2.5 }
+  ]
+}
+
+### 3. ไซส์ S: คราฟท์ + กุหลาบแดง 5 + คาร์เนชั่นชมพู 3 + ยูคาลิปตัส 4 (ใบไม้ไม่นับ = 8 ดอก → S, ไม่แนบ reference)
+### ควรได้ data.image (data:image/jpeg;base64,...), caption.size "S", remaining 2 · รอ 10–30 วิ
+POST {{baseUrl}}/ai/preview
+Content-Type: application/json
+Cookie: accessToken={{token}}
+
+{
+  "components": [
+    { "inventory_item_id": "{{kraft}}", "quantity": 1 },
+    { "inventory_item_id": "{{redRose}}", "quantity": 5 },
+    { "inventory_item_id": "{{pinkCarnation}}", "quantity": 3 },
+    { "inventory_item_id": "{{eucalyptus}}", "quantity": 4 }
+  ]
+}
+
+### 3.1 ไซส์ M: ริบบิ้น + ทิวลิปชมพู 8 + ยิปโซ 6 (14 ดอก → M, แนบ reference)
+POST {{baseUrl}}/ai/preview
+Content-Type: application/json
+Cookie: accessToken={{token}}
+
+{
+  "components": [
+    { "inventory_item_id": "{{ribbon}}", "quantity": 1 },
+    { "inventory_item_id": "{{pinkTulip}}", "quantity": 8 },
+    { "inventory_item_id": "{{babysBreath}}", "quantity": 6 }
+  ]
+}
+
+### 3.2 ไซส์ L: แจกันแก้ว + กุหลาบแดง 15 + ยิปโซ 10 (25 ดอก → L, แนบ reference)
+POST {{baseUrl}}/ai/preview
+Content-Type: application/json
+Cookie: accessToken={{token}}
+
+{
+  "components": [
+    { "inventory_item_id": "{{vase}}", "quantity": 1 },
+    { "inventory_item_id": "{{redRose}}", "quantity": 15 },
+    { "inventory_item_id": "{{babysBreath}}", "quantity": 10 }
+  ]
+}
+
+### 4. ครั้งที่ 4 ของวัน → 429 "used all 3 previews for today" (ไม่ยิง Cloudflare)
+POST {{baseUrl}}/ai/preview
+Content-Type: application/json
+Cookie: accessToken={{token}}
+
+{
+  "components": [
+    { "inventory_item_id": "{{kraft}}", "quantity": 1 },
+    { "inventory_item_id": "{{pinkTulip}}", "quantity": 3 }
+  ]
+}
+
+### 5. ไม่ login → 401 (ส่งหลัง logout หรือเปิด REST Client ใหม่)
+GET {{baseUrl}}/ai/preview/quota

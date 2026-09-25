@@ -6,7 +6,10 @@ import Product from "../../models/product.model.js";
 import InventoryItem from "../../models/inventory-items.model.js";
 import Cart from "../../models/cart.model.js";
 import User from "../../models/user.model.js";
+import mongoose from "mongoose";
 import { embedText, generateText } from "../../services/gemini.client.js";
+import { generateImage } from "../../services/cloudflare-image.client.js";
+import { buildPreviewPrompt, sizeTierFor, isFoliage } from "../../services/preview-prompt.js";
 import {
   PRODUCT_TYPE_LABELS,
   INVENTORY_CATEGORY_LABELS,
@@ -462,5 +465,176 @@ router.post("/sync", authen, authorize(["admin"]), async (req, res, next) => {
   } finally {
     // finally = ทำเสมอ ไม่ว่าสำเร็จหรือพัง ไม่งั้นถ้า sync พังครั้งเดียว ปุ่มจะติด 409 ตลอดไป
     isSyncing = false;
+  }
+});
+
+// ---------------------------------------------------------------------------
+// AI Preview: สร้างรูปช่อ custom ด้วย Cloudflare Workers AI (ดู AI_PREVIEW_PLAN.md ข้อ 4.4)
+// ปุ่ม Preview หน้า Custom design และปุ่ม Generate preview ในแชท ใช้ endpoint นี้ตัวเดียวกัน
+// ---------------------------------------------------------------------------
+
+// โควตา 3 รูป / วัน / คน (quota ฟรีของ Cloudflare 10,000 neurons/วัน ใช้ร่วมกันทั้งเว็บ)
+// นับเฉพาะรูปที่สร้างสำเร็จ · เก็บใน memory แบบ limitAskRate (restart server แล้วเริ่มนับใหม่ ยอมรับได้)
+const PREVIEW_DAILY_LIMIT = 3;
+const PREVIEW_MAX_QUANTITY = 99;
+const previewCountByUser = new Map(); // userId → { day: "2026-09-25", count: 2 }
+const previewInProgress = new Set(); // userId ที่กำลังรอรูปอยู่ (กันกดซ้ำระหว่างรอ 10–30 วิ)
+
+// "วัน" ตามเวลาไทย เช่น "2026-09-25" (en-CA ให้รูปแบบ YYYY-MM-DD)
+const todayInThailand = () =>
+  new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" });
+
+function previewUsedToday(userId) {
+  const record = previewCountByUser.get(String(userId));
+  return record?.day === todayInThailand() ? record.count : 0;
+}
+
+function addPreviewUsage(userId) {
+  const used = previewUsedToday(userId);
+  previewCountByUser.set(String(userId), { day: todayInThailand(), count: used + 1 });
+}
+
+// ตรวจ components → คืน { baseItem, flowerItems, caption } หรือ { error }
+// รูปแบบเดียวกับ components ของ /custom-design: [{ inventory_item_id, quantity }]
+async function loadPreviewComponents(components) {
+  if (!Array.isArray(components) || components.length === 0) {
+    return { error: "components is required" };
+  }
+  for (const c of components) {
+    if (!mongoose.isValidObjectId(c?.inventory_item_id)) {
+      return { error: "Each component needs a valid inventory_item_id" };
+    }
+    if (!Number.isInteger(c.quantity) || c.quantity < 1 || c.quantity > PREVIEW_MAX_QUANTITY) {
+      return { error: `quantity must be a whole number from 1 to ${PREVIEW_MAX_QUANTITY}` };
+    }
+  }
+  const ids = components.map((c) => String(c.inventory_item_id));
+  if (new Set(ids).size !== ids.length) {
+    return { error: "The same item appears more than once" };
+  }
+
+  const [items, knowledge] = await Promise.all([
+    InventoryItem.find({ _id: { $in: ids } }).lean(),
+    // คำบรรยายที่ Gemini เขียนไว้ตอน Sync AI (ใช้กับวัตถุดิบที่ไม่มีในตารางของ preview-prompt.js)
+    AiKnowledge.find({ source_type: "inventory", source_id: { $in: ids } })
+      .select("source_id visual_text is_foliage")
+      .lean(),
+  ]);
+  if (items.length !== ids.length) {
+    return { error: "Some items were not found" };
+  }
+  const aiById = new Map(knowledge.map((k) => [String(k.source_id), k]));
+  for (const item of items) item.ai = aiById.get(String(item._id)) || null;
+  const itemById = new Map(items.map((item) => [String(item._id), item]));
+  const withItems = components.map((c) => ({
+    item: itemById.get(String(c.inventory_item_id)),
+    quantity: c.quantity,
+  }));
+
+  // เหมือนหน้า Custom design: base 1 อย่าง (กระดาษห่อ / แจกัน) + ดอกไม้ 1–3 ชนิด
+  const bases = withItems.filter((c) => ["wrapping_paper", "vase"].includes(c.item.category));
+  const flowerItems = withItems.filter((c) => c.item.category === "flower");
+  if (bases.length !== 1) {
+    return { error: "Choose exactly 1 base (wrapping paper or vase)" };
+  }
+  if (flowerItems.length < 1 || flowerItems.length > 3) {
+    return { error: "Choose 1 to 3 different flowers" };
+  }
+  if (bases.length + flowerItems.length !== withItems.length) {
+    return { error: "Some items cannot be used in a custom bouquet" };
+  }
+
+  const flowerCount = flowerItems
+    .filter((c) => !isFoliage(c.item))
+    .reduce((sum, c) => sum + c.quantity, 0);
+
+  return {
+    baseItem: bases[0].item,
+    flowerItems,
+    // caption ใต้รูปในหน้าเว็บ: จำนวนจริงที่ลูกค้าเลือก (AI นับดอกไม่เป๊ะ ต้องบอกของจริงเสมอ)
+    caption: {
+      size: sizeTierFor(flowerCount).size,
+      base: bases[0].item.name,
+      flowers: flowerItems.map((c) => ({ name: c.item.name, quantity: c.quantity })),
+    },
+  };
+}
+
+// GET /api/v1/ai/preview/quota — ให้หน้าเว็บโชว์ "เหลือ 2/3" ก่อนกด
+router.get("/preview/quota", authen, (req, res) => {
+  const used = previewUsedToday(req.user.userId);
+  return res.json({
+    success: true,
+    data: { limit: PREVIEW_DAILY_LIMIT, remaining: Math.max(PREVIEW_DAILY_LIMIT - used, 0) },
+  });
+});
+
+// POST /api/v1/ai/preview
+// body: { components: [{ inventory_item_id, quantity }] }
+// ตอบ: { image: "data:image/jpeg;base64,...", caption, promptVersion, limit, remaining }
+router.post("/preview", authen, async (req, res, next) => {
+  const userId = String(req.user.userId);
+
+  if (previewUsedToday(userId) >= PREVIEW_DAILY_LIMIT) {
+    return res.status(429).json({
+      success: false,
+      message: `You have used all ${PREVIEW_DAILY_LIMIT} previews for today. Please try again tomorrow.`,
+      data: { limit: PREVIEW_DAILY_LIMIT, remaining: 0 },
+    });
+  }
+  if (previewInProgress.has(userId)) {
+    return res
+      .status(409)
+      .json({ success: false, message: "Your preview is still being created. Please wait." });
+  }
+
+  previewInProgress.add(userId);
+  try {
+    // 1. validate + ดึงชื่อ / สีจาก DB (prompt สร้างที่ backend เท่านั้น ไม่รับข้อความจาก frontend)
+    const loaded = await loadPreviewComponents(req.body?.components);
+    if (loaded.error) {
+      return res.status(400).json({ success: false, message: loaded.error });
+    }
+
+    // 2. prompt ตาม template + ไซส์ช่อ (S ไม่แนบ reference, M/L แนบ)
+    const { prompt, promptVersion, seed, useReference } = buildPreviewPrompt(
+      loaded.baseItem,
+      loaded.flowerItems,
+    );
+
+    // 3. สร้างรูป (10–30 วิ)
+    const imageBuffer = await generateImage({ prompt, seed, useReference });
+
+    // 4. นับโควตาหลังสร้างสำเร็จเท่านั้น (พังกลางทางไม่เสียโควตาลูกค้า)
+    addPreviewUsage(userId);
+
+    return res.json({
+      success: true,
+      data: {
+        image: `data:image/jpeg;base64,${imageBuffer.toString("base64")}`,
+        caption: loaded.caption,
+        promptVersion,
+        limit: PREVIEW_DAILY_LIMIT,
+        remaining: Math.max(PREVIEW_DAILY_LIMIT - previewUsedToday(userId), 0),
+      },
+    });
+  } catch (err) {
+    console.error("AI preview failed:", err.message);
+    // quota ฟรีของ Cloudflare ทั้งเว็บหมด (reset 07:00 น. เวลาไทย)
+    if (err.name === "QuotaExhaustedError") {
+      return res.status(503).json({
+        success: false,
+        message: "Preview images are fully booked for today. Please try again tomorrow after 7:00 AM.",
+      });
+    }
+    if (err.status) {
+      return res
+        .status(err.status)
+        .json({ success: false, message: "Preview is not available right now. Please try again." });
+    }
+    next(err);
+  } finally {
+    // ปลดล็อกเสมอ ไม่งั้นถ้าพังครั้งเดียว ลูกค้าจะติด 409 ตลอดไป
+    previewInProgress.delete(userId);
   }
 });
