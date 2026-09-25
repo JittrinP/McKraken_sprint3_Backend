@@ -341,7 +341,8 @@ preview_prompt_version: { type: String, trim: true }, // template รุ่น�
 | 4 | ปุ่มในแชท + ยืนยัน + navigate + รับ state | `ChatWidget.jsx`, `Customdesign.jsx` | frontend |
 | 5 | *(ไม่บังคับ)* รูปใน CustomList | `CustomList.jsx` | frontend |
 
-**สถานะ (2026-09-25):** Phase 0 ✅ · Phase 1 ✅ · **Phase 2 ✅** (base ทดสอบบนหน้าเว็บครบ 8 ข้อ ผ่าน) · ต่อไป Phase 3 + 5 (Save พร้อมรูป + รูปใน CustomList) → Phase 4 (Ask AI)
+**สถานะ (2026-09-26):** Phase 0 ✅ · 1 ✅ · 2 ✅ · **3 + 5 ✅** (Save พร้อมรูป → Vercel Blob · รูปใน CustomList · โหมด Edit โชว์รูปที่เซฟ) · **4 ✅** (Ask AI → Generate preview · base ทดสอบผ่านทั้งหมด) · เหลือ: ปรับจำนวน / ชนิดดอกในรูป + UX ฟอร์ม Save (ข้ามไว้ก่อน)
+- Phase 4 ที่ทำจริง: `/ai/ask` คำถามจัดช่อ → ส่งวัตถุดิบทั้งร้าน (≤ 60) ให้ AI + ขอบรรทัด `DESIGN_JSON` → backend ตัดออก (อ่านได้ทั้งตัวหนา / ``` / หลายบรรทัด) + ตรวจ + คิดราคาเอง → `design` · log `[design] ...` บอกเหตุผลตอนไม่มีปุ่ม · model สำรอง `GEMINI_FALLBACK_MODELS` (default `gemini-3.6-flash,gemini-3.1-flash-lite` เพราะ 2026-09-26 Google 503 ทั้งรุ่น 3.5) · frontend: ปุ่มใต้คำตอบ + ปุ่มถาวร 🌸 + ฟอร์ม 2 ช่อง + กล่องยืนยัน · Customdesign รับช่อผ่าน `location.state` ด้วย `useEffect([location.key])` (แบบเทียบตอน render พลาดกรณีอยู่หน้า Home อยู่แล้ว)
 - base ตัดสินใจ: ทำทีละ phase · **เรื่องจำนวน / ชนิดดอกในรูปยังไม่ตรงมาก → เก็บไว้ปรับทีหลังสุด** (หลัง Phase 4)
 - Phase 2 ที่ทำจริง (frontend): `lib/previewHistory.js`, `HomePage/_components/useDesignPreview.js` (hook), `HomePage/_components/PreviewPanel.jsx` (รูป + caption + ป้ายเตือน + history + loading) · `Customdesign.jsx` แก้แค่ import / เรียก hook / สลับ 3D ↔ รูป / ปุ่ม Preview · backend: `/preview/quota` ส่ง `promptVersion` เพิ่ม (ใช้เช็ค cache ใน history)
 
