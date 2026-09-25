@@ -14,7 +14,7 @@ import { router as aiRoutes } from "./ai.routes.js"; // AI chatbot (Ask AI) ด�
 import { router as orderRoutes } from "./order.routes.js";
 
 // Import route ของ Inventory Item ที่เราสร้างขึ้นใหม่
-import { router as inventoryItemRoutes } from "./inventory-item.routes.js"; 
+import { router as inventoryItemRoutes } from "./inventory-items.routes.js"; 
 
 export const routes = Router();
 
