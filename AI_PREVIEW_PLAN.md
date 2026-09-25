@@ -341,6 +341,10 @@ preview_prompt_version: { type: String, trim: true }, // template รุ่น�
 | 4 | ปุ่มในแชท + ยืนยัน + navigate + รับ state | `ChatWidget.jsx`, `Customdesign.jsx` | frontend |
 | 5 | *(ไม่บังคับ)* รูปใน CustomList | `CustomList.jsx` | frontend |
 
+**สถานะ (2026-09-25):** Phase 0 ✅ · Phase 1 ✅ · **Phase 2 ✅** (base ทดสอบบนหน้าเว็บครบ 8 ข้อ ผ่าน) · ต่อไป Phase 3 + 5 (Save พร้อมรูป + รูปใน CustomList) → Phase 4 (Ask AI)
+- base ตัดสินใจ: ทำทีละ phase · **เรื่องจำนวน / ชนิดดอกในรูปยังไม่ตรงมาก → เก็บไว้ปรับทีหลังสุด** (หลัง Phase 4)
+- Phase 2 ที่ทำจริง (frontend): `lib/previewHistory.js`, `HomePage/_components/useDesignPreview.js` (hook), `HomePage/_components/PreviewPanel.jsx` (รูป + caption + ป้ายเตือน + history + loading) · `Customdesign.jsx` แก้แค่ import / เรียก hook / สลับ 3D ↔ รูป / ปุ่ม Preview · backend: `/preview/quota` ส่ง `promptVersion` เพิ่ม (ใช้เช็ค cache ใน history)
+
 - ⚠️ `Customdesign.jsx` มีงานของ Poramet (custom product) ด้วย → **แจ้งทีมก่อนแก้** และแยก component ใหม่ (`PreviewPanel.jsx`, `PreviewHistory.jsx`) ให้แตะไฟล์เดิมน้อยที่สุด
 - env ใหม่บน Render: `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, `CF_IMAGE_MODEL`, `CF_IMAGE_TIMEOUT_MS`, `BLOB_READ_WRITE_TOKEN`
 - branch แนะนำ: `ai-preview` ทั้ง 2 repo

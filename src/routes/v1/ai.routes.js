@@ -9,7 +9,12 @@ import User from "../../models/user.model.js";
 import mongoose from "mongoose";
 import { embedText, generateText } from "../../services/gemini.client.js";
 import { generateImage } from "../../services/cloudflare-image.client.js";
-import { buildPreviewPrompt, sizeTierFor, isFoliage } from "../../services/preview-prompt.js";
+import {
+  buildPreviewPrompt,
+  sizeTierFor,
+  isFoliage,
+  PROMPT_VERSION,
+} from "../../services/preview-prompt.js";
 import {
   PRODUCT_TYPE_LABELS,
   INVENTORY_CATEGORY_LABELS,
@@ -561,11 +566,17 @@ async function loadPreviewComponents(components) {
 }
 
 // GET /api/v1/ai/preview/quota — ให้หน้าเว็บโชว์ "เหลือ 2/3" ก่อนกด
+// promptVersion: frontend ใช้เช็คว่ารูปใน history (localStorage) มาจาก template รุ่นปัจจุบันไหม
+// ถ้าใช่ + ช่อเดิม → โชว์รูปเดิมได้เลย ไม่ต้องสร้างใหม่ (ไม่เสียโควตา)
 router.get("/preview/quota", authen, (req, res) => {
   const used = previewUsedToday(req.user.userId);
   return res.json({
     success: true,
-    data: { limit: PREVIEW_DAILY_LIMIT, remaining: Math.max(PREVIEW_DAILY_LIMIT - used, 0) },
+    data: {
+      limit: PREVIEW_DAILY_LIMIT,
+      remaining: Math.max(PREVIEW_DAILY_LIMIT - used, 0),
+      promptVersion: PROMPT_VERSION,
+    },
   });
 });
 
