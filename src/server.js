@@ -17,7 +17,8 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
-app.use(express.json());
+// default ของ express.json() รับ body ไม่เกิน 100KB → ขยายเป็น 1MB ให้ Save ช่อพร้อมรูป AI preview ได้ (~50–100KB)
+app.use(express.json({ limit: "1mb" }));
 app.use(cookieParser());
 
 app.use("/api", apiRoutes);

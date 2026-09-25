@@ -37,6 +37,13 @@ const aiKnowledgeSchema = new mongoose.Schema(
       default: "READY",
     },
     lastError: { type: String, default: null },
+
+    // ใช้กับรูป AI preview เท่านั้น (เฉพาะ source_type "inventory") ดู AI_PREVIEW_PLAN.md ข้อ 4.3
+    // Gemini เขียนให้ตอน sync เฉพาะวัตถุดิบที่ไม่มีในตารางคำบรรยายใน preview-prompt.js (เช่น ดอกที่เพิ่มใหม่)
+    // visual_text = หน้าตาเป็นภาษาอังกฤษสั้นๆ เช่น "pink carnations with ruffled petals"
+    visual_text: { type: String, default: null },
+    // true = ใบไม้ (ไม่นับเป็นดอกตอนแบ่งไซส์ช่อ S / M / L)
+    is_foliage: { type: Boolean, default: null },
   },
   {
     collection: "ai_knowledge",

@@ -2,7 +2,8 @@ import crypto from "node:crypto";
 import Product from "../models/product.model.js";
 import InventoryItem from "../models/inventory-items.model.js";
 import AiKnowledge from "../models/ai-knowledge.model.js";
-import { embedText } from "./gemini.client.js";
+import { embedText, generateText } from "./gemini.client.js";
+import { hasManualVisualText } from "./preview-prompt.js";
 
 // สร้าง / อัปเดต "คลังความรู้" ของ AI (collection ai_knowledge) จากข้อมูลร้าน
 // ดู AI_CHATBOT_PLAN.md ข้อ 4.2 (ข้อความที่ embed) และ 4.3 (sync)
@@ -115,6 +116,62 @@ async function saveKnowledge(sourceType, sourceId, text) {
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // ---------------------------------------------------------------------------
+// 2.1 คำบรรยายหน้าตาสำหรับรูป AI preview (ดู AI_PREVIEW_PLAN.md ข้อ 4.3)
+// ---------------------------------------------------------------------------
+// ใช้กับวัตถุดิบที่ไม่มีในตารางคำบรรยายของ preview-prompt.js เท่านั้น (เช่น ดอกที่แอดมินเพิ่มใหม่)
+// เขียนครั้งเดียวแล้วเก็บไว้ จะเขียนใหม่เมื่อข้อมูลวัตถุดิบเปลี่ยน → คำบรรยายนิ่ง รูปออกมาเหมือนเดิม
+function buildVisualPrompt(item) {
+  const isBase = item.category === "wrapping_paper" || item.category === "vase";
+  return [
+    "You write short visual descriptions for an image generator that makes product photos of flower bouquets.",
+    "Describe how this florist ingredient looks. Reply with JSON only, no markdown:",
+    '{"visual_text": "...", "is_foliage": true or false}',
+    isBase
+      ? '- visual_text: a short noun phrase for the material and look, e.g. "layered cream Korean-style wrapping paper" or "tall clear glass vase". Max 12 words.'
+      : '- visual_text: a short plural noun phrase for how these stems look in a bouquet, e.g. "pink carnations with ruffled petals". Max 12 words.',
+    "- is_foliage: true only if it is leaves / greenery rather than a flower.",
+    "- English only. Describe appearance only (no price, no origin, no brand).",
+    "",
+    buildInventoryText(item),
+  ].join("\n");
+}
+
+// Gemini บางครั้งครอบ JSON ด้วย ```json ... ``` → ตัดออกก่อน parse
+function parseVisual(answer) {
+  const json = String(answer || "").replace(/```(json)?/g, "").trim();
+  const data = JSON.parse(json);
+  const visualText = String(data.visual_text || "").trim().slice(0, 120);
+  if (!visualText) throw new Error("visual_text is empty");
+  return { visual_text: visualText, is_foliage: data.is_foliage === true };
+}
+
+// ให้ Gemini เขียนคำบรรยาย 1 ชิ้น คืน { visual_text, is_foliage } (ยังไม่บันทึก · export ไว้ทดสอบได้)
+export async function describeInventoryVisual(item) {
+  const answer = await generateText({ prompt: buildVisualPrompt(item) });
+  return parseVisual(answer);
+}
+
+// คืนค่า "described" (เขียนใหม่) / "kept" (ไม่ต้องเขียน) / "failed"
+// knowledgeResult = ผลของ saveKnowledge: "embedded" แปลว่าข้อมูลวัตถุดิบเปลี่ยน → ต้องเขียนคำบรรยายใหม่
+async function saveVisualText(item, knowledgeResult) {
+  if (hasManualVisualText(item)) return "kept"; // มีในตารางที่เขียนเองแล้ว
+  if (knowledgeResult === "failed") return "kept"; // embed พัง sync รอบหน้าค่อยทำพร้อมกัน
+
+  const filter = { source_type: "inventory", source_id: item._id };
+  const existing = await AiKnowledge.findOne(filter).select("visual_text");
+  if (knowledgeResult === "skipped" && existing?.visual_text) return "kept";
+
+  try {
+    await AiKnowledge.updateOne(filter, { $set: await describeInventoryVisual(item) });
+    return "described";
+  } catch (err) {
+    // ไม่มีคำบรรยาย → preview ใช้ "<สี> <ชื่อ>" แทน ไม่พัง · sync รอบหน้าลองใหม่เอง (visual_text ยังว่าง)
+    console.error(`Visual text failed for ${item.name}:`, err.message);
+    return "failed";
+  }
+}
+
+// ---------------------------------------------------------------------------
 // 3. sync ทั้งร้าน
 // ---------------------------------------------------------------------------
 // - product เอาเฉพาะ is_active: true (สินค้าที่ปิดขายไม่ให้ AI แนะนำ)
@@ -128,7 +185,8 @@ export async function syncAiKnowledge({ delayMs = 300, log = console.log } = {})
   );
   const inventoryItems = await InventoryItem.find();
 
-  const summary = { embedded: 0, skipped: 0, failed: 0, removed: 0 };
+  // described / describeFailed = คำบรรยายสำหรับรูป AI preview (ข้อ 2.1)
+  const summary = { embedded: 0, skipped: 0, failed: 0, removed: 0, described: 0, describeFailed: 0 };
 
   const sources = [
     ...products.map((p) => ({ type: "product", doc: p, text: buildProductText(p) })),
@@ -141,6 +199,16 @@ export async function syncAiKnowledge({ delayMs = 300, log = console.log } = {})
     log(`${result.padEnd(8)} ${type.padEnd(9)} ${doc.name}`);
     // skipped ไม่ได้เรียก Gemini ไม่ต้องรอ
     if (result !== "skipped") await sleep(delayMs);
+
+    if (type === "inventory") {
+      const visual = await saveVisualText(doc, result);
+      if (visual === "described") summary.described += 1;
+      if (visual === "failed") summary.describeFailed += 1;
+      if (visual !== "kept") {
+        log(`${visual.padEnd(8)} visual    ${doc.name}`);
+        await sleep(delayMs);
+      }
+    }
   }
 
   // กันพลาด: ถ้าอ่านข้อมูลร้านไม่ได้เลย (เช่นต่อ DB ผิดตัว) อย่าลบคลังความรู้ทิ้งทั้งหมด
