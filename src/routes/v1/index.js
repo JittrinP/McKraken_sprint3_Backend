@@ -13,7 +13,7 @@ import { router as productRoutes } from "./product.routes.js";
 import { router as aiRoutes } from "./ai.routes.js"; // AI chatbot (Ask AI) ดู AI_CHATBOT_PLAN.md
 import { router as orderRoutes } from "./order.routes.js";
 
-// [UPDATE 1] Import route ของ Inventory Item ที่เราสร้างขึ้นใหม่
+// Import route ของ Inventory Item ที่เราสร้างขึ้นใหม่
 import { router as inventoryItemRoutes } from "./inventory-item.routes.js"; 
 
 export const routes = Router();
@@ -31,11 +31,15 @@ routes.use("/auth", authRoutes);
 routes.use("/custom-design", customDesignRoutes);
 // server mount /api และ v1 อยู่ชั้นนอก จึงได้ endpoint จริงเป็น /api/v1/products
 routes.use("/products", productRoutes);
-
-// [UPDATE 2] Mount path สำหรับ inventory-items
+// Mount path สำหรับ inventory-items
 // จะได้ endpoint เป็น /api/v1/inventory-items
 routes.use("/inventory-items", inventoryItemRoutes);
+
+// [UPDATE] แก้ไขจาก /admin/orders เป็น /orders เพื่อให้ใช้ได้ทั้งฝั่ง Customer และ Admin
+// จะได้ endpoint ดังนี้:
+// - Customer: /api/v1/orders/my-orders (ดูประวัติ)
+// - Customer: /api/v1/orders/:orderId/cancel (ยกเลิกออเดอร์)
+// - Admin:    /api/v1/orders/ (ดูออเดอร์ทั้งหมด - เช็คสิทธิ์ admin ข้างใน)
+routes.use("/orders", orderRoutes);
 // ต้อง login (authen อยู่ข้างใน ai.routes.js) → POST /api/v1/ai/ask
 routes.use("/ai", aiRoutes);
-// order ของทุก user สำหรับหน้า Admin OrderList (ต้องเป็น admin เท่านั้น เช็คใน route)
-routes.use("/admin/orders", orderRoutes);
