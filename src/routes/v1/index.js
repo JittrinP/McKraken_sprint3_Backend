@@ -10,6 +10,7 @@ import { router as customDesignRoutes } from "./custom-design.routes.js";
 import { router as paymentRoutes } from "./payment.routes.js";
 // ใช้ product resource เดียวกันสำหรับ storefront และหน้า Admin ProductEdit
 import { router as productRoutes } from "./product.routes.js";
+import { router as aiRoutes } from "./ai.routes.js"; // AI chatbot (Ask AI) ดู AI_CHATBOT_PLAN.md
 import { router as orderRoutes } from "./order.routes.js";
 
 export const routes = Router();
@@ -27,5 +28,7 @@ routes.use("/auth", authRoutes);
 routes.use("/custom-design", customDesignRoutes);
 // server mount /api และ v1 อยู่ชั้นนอก จึงได้ endpoint จริงเป็น /api/v1/products
 routes.use("/products", productRoutes);
+// ต้อง login (authen อยู่ข้างใน ai.routes.js) → POST /api/v1/ai/ask
+routes.use("/ai", aiRoutes);
 // order ของทุก user สำหรับหน้า Admin OrderList (ต้องเป็น admin เท่านั้น เช็คใน route)
 routes.use("/admin/orders", orderRoutes);
