@@ -14,7 +14,8 @@ import { router as aiRoutes } from "./ai.routes.js"; // AI chatbot (Ask AI) ด�
 
 // [UPDATE] Import route สำหรับ Order และ Inventory Item
 import { router as orderRoutes } from "./order.routes.js";
-import { router as inventoryItemRoutes } from "./inventory-items.routes.js"; 
+import { router as inventoryItemRoutes } from "./inventory-items.routes.js";
+import { router as dashboardRoutes } from "./dashboard.routes.js"; // ตัวเลขสรุป/กราฟของหน้า Admin Dashboard ดู ADMIN_DASHBOARD.md
 
 export const routes = Router();
 
@@ -43,6 +44,9 @@ routes.use("/inventory-items", inventoryItemRoutes);
 // - Customer: /api/v1/orders/:orderId/cancel (ยกเลิกออเดอร์)
 // - Admin:    /api/v1/orders/ (ดูออเดอร์ทั้งหมด - เช็คสิทธิ์ admin ข้างใน)
 routes.use("/orders", orderRoutes);
+
+// admin เท่านั้น (authen + authorize อยู่ข้างใน dashboard.routes.js) → GET /api/v1/dashboard/order-status
+routes.use("/dashboard", dashboardRoutes);
 
 // ต้อง login (authen อยู่ข้างใน ai.routes.js) → POST /api/v1/ai/ask
 routes.use("/ai", aiRoutes);
