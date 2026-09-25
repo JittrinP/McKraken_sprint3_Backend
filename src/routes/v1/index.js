@@ -10,6 +10,7 @@ import { router as customDesignRoutes } from "./custom-design.routes.js";
 import { router as paymentRoutes } from "./payment.routes.js";
 // ใช้ product resource เดียวกันสำหรับ storefront และหน้า Admin ProductEdit
 import { router as productRoutes } from "./product.routes.js";
+import { router as aiRoutes } from "./ai.routes.js"; // AI chatbot (Ask AI) ดู AI_CHATBOT_PLAN.md
 import { router as orderRoutes } from "./order.routes.js";
 
 // Import route ของ Inventory Item ที่เราสร้างขึ้นใหม่
@@ -40,3 +41,5 @@ routes.use("/inventory-items", inventoryItemRoutes);
 // - Customer: /api/v1/orders/:orderId/cancel (ยกเลิกออเดอร์)
 // - Admin:    /api/v1/orders/ (ดูออเดอร์ทั้งหมด - เช็คสิทธิ์ admin ข้างใน)
 routes.use("/orders", orderRoutes);
+// ต้อง login (authen อยู่ข้างใน ai.routes.js) → POST /api/v1/ai/ask
+routes.use("/ai", aiRoutes);
