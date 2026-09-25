@@ -140,3 +140,63 @@ export async function getDashboardSummary(req, res, next) {
     next(err);
   }
 }
+
+// แปลงเวลา (Date) เป็นวันที่ตามเวลาไทย เช่น "2026-09-25"
+// createdAt ใน database เก็บเป็นเวลา UTC ถ้าไม่บวก 7 ชั่วโมง order ที่สั่งตอนตี 1 เวลาไทยจะถูกนับเป็นวันก่อนหน้า
+function toThaiDateString(date) {
+  const thaiTime = new Date(date.getTime() + 7 * 60 * 60 * 1000); // บวก 7 ชั่วโมง (UTC+7)
+  return thaiTime.toISOString().slice(0, 10); // เอาแค่ส่วนวันที่ "YYYY-MM-DD"
+}
+
+// GET /api/v1/dashboard/sales?range=7d|30d|90d
+// ยอดขายรายวันย้อนหลังจากวันนี้ ใช้กับกราฟ Sale Statistic
+// กฎนับยอดขายเดียวกับการ์ด Total Sales: order ที่ paid และไม่ถูกยกเลิก รวม grand_total
+export async function getSalesStatistic(req, res, next) {
+  try {
+    // 1. จำนวนวันจาก ?range= (ไม่ส่งมา หรือส่งค่าอื่นมา = 7 วัน)
+    let days = 7;
+    if (req.query.range === "30d") {
+      days = 30;
+    }
+    if (req.query.range === "90d") {
+      days = 90;
+    }
+
+    // 2. สร้างรายการวันที่ให้ครบทุกวัน ยอดเริ่มเป็น 0 (วันที่ไม่มี order จะยังเป็น 0 อยู่)
+    //    เรียงจากเก่าไปใหม่ วันนี้อยู่ท้ายสุด เช่น 7 วัน = 6 วันก่อน, 5 วันก่อน, ..., วันนี้
+    const now = new Date();
+    const oneDay = 24 * 60 * 60 * 1000; // 1 วัน เป็นมิลลิวินาที
+    const result = [];
+
+    for (let i = days - 1; i >= 0; i--) {
+      const date = toThaiDateString(new Date(now.getTime() - i * oneDay)); // ย้อนจากวันนี้ไป i วัน
+      result.push({ date: date, sales: 0, orders: 0 });
+    }
+
+    // 3. ดึง order ตามกฎ ตั้งแต่เที่ยงคืน (เวลาไทย) ของวันแรกในรายการ
+    const firstDay = result[0].date;
+    const startDate = new Date(firstDay + "T00:00:00+07:00"); // +07:00 = บอกว่าเป็นเวลาไทย
+
+    const orders = await Order.find({
+      "payment_pricing.payment_status": "paid",
+      order_status: { $ne: "cancelled" }, // $ne = ไม่เท่ากับ
+      createdAt: { $gte: startDate }, // $gte = ตั้งแต่เวลานี้เป็นต้นไป
+    });
+
+    // 4. เอายอดของแต่ละ order ไปบวกเข้ากับวันที่ตรงกัน
+    for (const order of orders) {
+      const orderDate = toThaiDateString(order.createdAt); // วันที่สั่ง (เวลาไทย)
+
+      for (const day of result) {
+        if (day.date === orderDate) {
+          day.sales = day.sales + order.payment_pricing.grand_total;
+          day.orders = day.orders + 1;
+        }
+      }
+    }
+
+    return res.json({ success: true, data: result }); // เช่น [{ date: "2026-09-20", sales: 0, orders: 0 }, ...]
+  } catch (err) {
+    next(err);
+  }
+}
