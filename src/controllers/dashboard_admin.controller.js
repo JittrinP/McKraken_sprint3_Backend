@@ -1,6 +1,7 @@
 import Order from "../models/order.model.js";
 import Product from "../models/product.model.js";
 import InventoryItem from "../models/inventory-items.model.js";
+import User from "../models/user.model.js";
 
 // GET /api/v1/dashboard/order-status
 // นับจำนวน order แยกตาม status ใช้กับกราฟ Shipment Status ในหน้า Admin Dashboard
@@ -89,6 +90,52 @@ export async function getTopFlowers(req, res, next) {
     const top5 = flowers.slice(0, 5);
 
     return res.json({ success: true, data: top5 });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// GET /api/v1/dashboard/summary
+// ตัวเลขของการ์ด 4 ใบบนสุดของหน้า Admin Dashboard
+export async function getDashboardSummary(req, res, next) {
+  try {
+    // 1. Total Sales: รวมยอดที่ลูกค้าจ่ายจริง (grand_total) เฉพาะ order ที่จ่ายเงินแล้ว และไม่ถูกยกเลิก
+    const paidOrders = await Order.find({
+      "payment_pricing.payment_status": "paid",
+      order_status: { $ne: "cancelled" }, // $ne = ไม่เท่ากับ
+    });
+
+    let totalSales = 0;
+    for (const order of paidOrders) {
+      totalSales = totalSales + order.payment_pricing.grand_total;
+    }
+
+    // 2. Total Customers: นับ user ที่เป็นลูกค้า และยังไม่ถูกลบ (delete_at เป็น null)
+    const totalCustomers = await User.countDocuments({
+      role: "customer",
+      delete_at: null,
+    });
+
+    // 3. Flower Stock: รวมสต๊อกของ inventory item ที่เป็นดอกไม้
+    const flowers = await InventoryItem.find({ category: "flower" });
+
+    let flowerStock = 0;
+    for (const flower of flowers) {
+      flowerStock = flowerStock + flower.stock_quantity;
+    }
+
+    // 4. Total Orders: นับทุก order (รวม order ที่ถูกยกเลิกด้วย)
+    const totalOrders = await Order.countDocuments();
+
+    return res.json({
+      success: true,
+      data: {
+        totalSales: totalSales,
+        totalCustomers: totalCustomers,
+        flowerStock: flowerStock,
+        totalOrders: totalOrders,
+      },
+    });
   } catch (err) {
     next(err);
   }
