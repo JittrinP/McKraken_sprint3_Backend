@@ -1,5 +1,6 @@
 import { Router } from "express";
 import Cart from "../../models/cart.model.js";
+import User from "../../models/user.model.js";
 import "../../models/product.model.js";
 import "../../models/inventory-items.model.js";
 import { calcCart } from "../../utils/pricing.js";
@@ -35,7 +36,18 @@ router.get("/", authen , async (req, res, next) => {
     }
 
     //calcCart คืนค่า items (มี unit_price , line_total) ทับ items เดิมของ cart
-    return res.status(200).json({ ...cart.toObject(), ...calcCart(cart) });
+    const { items, ...prices } = calcCart(cart);
+
+    // เติมรูป AI preview ให้ช่อ custom ที่มี design_id (ไม่เก็บรูปใน cart ดึงสดจากช่อที่เซฟไว้ เปลี่ยนรูปช่อแล้วตะกร้าเปลี่ยนตาม)
+    const user = await User.findById(user_id).select("saved_custom_designs");
+    const itemsWithImage = items.map((item) => {
+      const designId = item.custom_specs?.design_id;
+      const imageUrl = designId && user?.saved_custom_designs.id(designId)?.preview_image_url;
+      if (!imageUrl) return item;
+      return { ...item, custom_specs: { ...item.custom_specs, preview_image_url: imageUrl } };
+    });
+
+    return res.status(200).json({ ...cart.toObject(), ...prices, items: itemsWithImage });
   } catch (err) {
     next(err);
   }
