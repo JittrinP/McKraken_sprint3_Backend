@@ -106,6 +106,11 @@ const customSpecsSchema = new mongoose.Schema(
 			type: String,
 			trim: true,
 		},
+		// รูป AI preview ของช่อ (ไฟล์ที่ก๊อปมาเป็นของ order เอง ไม่ใช่ไฟล์เดียวกับช่อที่เซฟไว้) ไม่มีรูป = ไม่มี field นี้
+		preview_image_url: {
+			type: String,
+			trim: true,
+		},
 		components: {
 			type: [componentSnapshotSchema],
 			default: [],

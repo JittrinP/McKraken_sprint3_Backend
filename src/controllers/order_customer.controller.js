@@ -1,6 +1,8 @@
 import Order from "../models/order.model.js";
 import Cart from "../models/cart.model.js";
+import User from "../models/user.model.js";
 import { calcCart } from "../utils/pricing.js";
+import { copyPreviewImageToOrder } from "../services/preview-image-store.js";
 
 // ==========================================
 // 1. สร้าง Order ใหม่เมื่อจ่ายเงินสำเร็จ (POST /)
@@ -22,8 +24,19 @@ export const createOrder = async (req, res, next) => {
     // คำนวณราคาด้วย utils/pricing.js
     const pricing = calcCart(cart);
 
+    // สร้าง order_number รูปแบบ ORD-YYYYMMDD-XXXX (สร้างก่อน เพราะใช้ตั้งชื่อไฟล์รูปของ order ด้วย)
+    const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+    const randomNum = Math.floor(1000 + Math.random() * 9000);
+    const orderNumber = `ORD-${dateStr}-${randomNum}`;
+
+    // ช่อ custom ที่กดมาจาก CustomList มี design_id → หารูป AI preview จากช่อที่เซฟไว้ใน user
+    const user = await User.findById(userId).select("saved_custom_designs");
+    const designImageOf = (designId) =>
+      designId ? user?.saved_custom_designs.id(designId)?.preview_image_url : undefined;
+
     // Map รายการสินค้าใน cart ให้กลายเป็น snapshot ของ orderItemSchema
-    const orderItems = cart.items.map((item) => {
+    // เป็น async เพราะช่อที่มีรูปต้องรอก๊อปรูปบน Blob ก่อน · Promise.all = รอทุกรายการเสร็จ
+    const orderItems = await Promise.all(cart.items.map(async (item, index) => {
       if (item.item_type === "standard_product") {
         return {
           item_type: "standard_product",
@@ -37,10 +50,15 @@ export const createOrder = async (req, res, next) => {
           item_type: "custom_product",
           item_name: item.custom_specs?.design_name || "Custom Bouquet",
           quantity: item.quantity,
-          unit_price: item.unit_price || 0,
+          // cart ไม่ได้เก็บ unit_price ต้องเอาจาก calcCart (pricing.items เรียงตรงกับ cart.items)
+          unit_price: pricing.items[index].unit_price,
           custom_specs: {
             design_name: item.custom_specs?.design_name,
             design_description: item.custom_specs?.design_description,
+            preview_image_url: await copyPreviewImageToOrder(
+              designImageOf(item.custom_specs?.design_id),
+              orderNumber,
+            ),
             assembly_fee: item.custom_specs?.assembly_fee || 0,
             components: (item.custom_specs?.components || []).map((c) => ({
               inventory_item_id: c.inventory_item_id._id,
@@ -51,12 +69,7 @@ export const createOrder = async (req, res, next) => {
           },
         };
       }
-    });
-
-    // สร้าง order_number รูปแบบ ORD-YYYYMMDD-XXXX
-    const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-    const randomNum = Math.floor(1000 + Math.random() * 9000);
-    const orderNumber = `ORD-${dateStr}-${randomNum}`;
+    }));
 
     // บันทึกลง Database
     const newOrder = await Order.create({

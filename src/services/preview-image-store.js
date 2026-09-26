@@ -2,7 +2,7 @@
 // DB เก็บแค่ URL (preview_image_url) ไม่เก็บรูปใน MongoDB (document ของ user จะใหญ่ + /auth/me ช้า)
 // @vercel/blob อ่าน token จาก BLOB_READ_WRITE_TOKEN ใน .env / Render เอง
 // ทำไมต้องมี token: backend (บน Render) ต้อง "เขียน" ไฟล์เข้า store ของเรา · อ่านรูป public ไม่ต้องใช้ token
-import { put, del } from "@vercel/blob";
+import { put, del, copy } from "@vercel/blob";
 
 // frontend ย่อรูปเป็น webp 640px แล้ว (~50–100KB) เผื่อไว้ 500KB
 const MAX_IMAGE_BYTES = 500 * 1024;
@@ -31,6 +31,24 @@ export async function uploadPreviewImage(userId, designId, { contentType, buffer
     addRandomSuffix: true,
   });
   return blob.url;
+}
+
+// ก๊อปรูปของช่อไปเป็นไฟล์ของ order (ใช้ตอน createOrder)
+// order = snapshot ต้องมีไฟล์ของตัวเอง ลูกค้าลบช่อ/เปลี่ยนรูปทีหลัง รูปใน order จะไม่หายตาม
+// ก๊อปไม่สำเร็จ → คืน URL เดิมไปก่อน (ยังโชว์ได้จนกว่าช่อจะถูกลบ) ไม่ให้การสั่งซื้อพังเพราะรูป
+export async function copyPreviewImageToOrder(url, orderNumber) {
+  if (!url) return undefined;
+  try {
+    const extension = new URL(url).pathname.split(".").pop();
+    const blob = await copy(url, `order-previews/${orderNumber}.${extension}`, {
+      access: "public",
+      addRandomSuffix: true, // 1 order มีหลายช่อ custom ได้ ชื่อไฟล์จะได้ไม่ชนกัน
+    });
+    return blob.url;
+  } catch (err) {
+    console.error("Copy preview image failed:", err.message);
+    return url;
+  }
 }
 
 // ลบรูปเก่า (เปลี่ยนรูป / ลบช่อ / เซฟทับ preset) · ลบไม่สำเร็จไม่เป็นไร แค่มีไฟล์ค้างใน Blob ไม่กระทบลูกค้า
